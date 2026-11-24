@@ -1,0 +1,6 @@
+{
+  "name": "Choo-Choo Khitan Adventure",
+  "description": "Undangan digital Walimatul Khitan Faqih Al-Arif Billah bertema petualangan kereta uap ceria lengkap dengan tiket boarding pass, hitung mundur stasiun, 6 gerbong galeri, amplop digital BSI & QRIS, dan buku tamu telegram.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
