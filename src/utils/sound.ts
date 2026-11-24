@@ -3,7 +3,27 @@ let melodyTimer: number | null = null;
 let isMelodyActive = false;
 let backgroundAudio: HTMLAudioElement | null = null;
 
-const BACKGROUND_MUSIC_URL = '/lagu-undangan.mp3';
+let currentMusicUrl = '/lagu-undangan.mp3';
+
+export function setBackgroundMusicUrl(url: string | null | undefined): void {
+  if (!url) return;
+  if (currentMusicUrl === url) return;
+  currentMusicUrl = url;
+
+  if (backgroundAudio) {
+    const wasPlaying = !backgroundAudio.paused;
+    backgroundAudio.pause();
+    backgroundAudio.src = currentMusicUrl;
+    backgroundAudio.load();
+    if (wasPlaying) {
+      void backgroundAudio.play().catch(() => {});
+    }
+  }
+}
+
+export function getBackgroundMusicUrl(): string {
+  return currentMusicUrl;
+}
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -53,9 +73,13 @@ export function playTrainWhistle(): void {
 }
 
 /**
- * Starts or stops a gentle storybook music-box celebratory loop.
+ * Starts or stops a gentle storybook music-box celebratory loop or MP3 background music.
  */
-export function toggleBackgroundMusic(shouldPlay: boolean): boolean {
+export function toggleBackgroundMusic(shouldPlay: boolean, customUrl?: string): boolean {
+  if (customUrl) {
+    setBackgroundMusicUrl(customUrl);
+  }
+
   if (!shouldPlay) {
     isMelodyActive = false;
     if (melodyTimer !== null) {
@@ -80,12 +104,12 @@ export function toggleBackgroundMusic(shouldPlay: boolean): boolean {
         }
       })
       .catch(() => {
-        // Browser can reject playback; the app will keep the existing synth fallback below.
+        // Browser can reject playback; fallback to synth
       });
     return true;
   }
 
-  const mp3Audio = new Audio(BACKGROUND_MUSIC_URL);
+  const mp3Audio = new Audio(currentMusicUrl);
   mp3Audio.volume = 0.5;
   mp3Audio.loop = true;
   mp3Audio.preload = 'auto';
@@ -100,7 +124,7 @@ export function toggleBackgroundMusic(shouldPlay: boolean): boolean {
       }
     })
     .catch(() => {
-      backgroundAudio = null;
+      // Browser can reject auto-play without user interaction; app uses synth fallback below
     });
 
   const ctx = getAudioContext();

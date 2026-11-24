@@ -1,6 +1,9 @@
 import React from 'react';
+import { useInvitationData } from '../context/InvitationContext';
 
 export const CulturalBlessing: React.FC = () => {
+  const { invitationInfo } = useInvitationData();
+
   return (
     <section aria-labelledby="salam-heading" className="px-1">
       <div className="card-storybook rounded-3xl p-6 text-center">
@@ -20,9 +23,8 @@ export const CulturalBlessing: React.FC = () => {
         </h2>
 
         <p className="text-[15px] leading-[1.7] text-[#2B2D42] mb-5">
-          Dengan memohon rahmat dan ridho Allah SWT, kami mengundang Bapak/Ibu/Saudara/i
-          untuk turut hadir memberikan doa restu pada acara Walimatul Khitan putra kami,
-          langkah awal sang pemberani menuju pribadi yang sholeh, sehat, dan penuh semangat.
+          {invitationInfo.invitation_message ||
+            'Dengan memohon rahmat dan ridho Allah SWT, kami mengundang Bapak/Ibu/Saudara/i untuk turut hadir memberikan doa restu pada acara Walimatul Khitan putra kami, langkah awal sang pemberani menuju pribadi yang sholeh, sehat, dan penuh semangat.'}
         </p>
 
         <div className="bg-[#FFF9F2] rounded-2xl p-4 border border-[#FCBF49]/40">

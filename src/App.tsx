@@ -1,45 +1,44 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {Share2, Train} from 'lucide-react';
-import {BoardingPassTicket} from './components/BoardingPassTicket';
-import {BottomStationNav} from './components/BottomStationNav';
-import {CarriageGallery} from './components/CarriageGallery';
-import {CulturalBlessing} from './components/CulturalBlessing';
-import {RsvpAndWishes} from './components/RsvpAndWishes';
-import {StationCountdown} from './components/StationCountdown';
-import {TrackDivider} from './components/StorybookIllustrations';
-import {TicketBoothGift} from './components/TicketBoothGift';
-import {VenueAndRundown} from './components/VenueAndRundown';
-import {playTrainWhistle, toggleBackgroundMusic} from './utils/sound';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2, Lock, Share2, Train } from 'lucide-react';
+import { BoardingPassTicket } from './components/BoardingPassTicket';
+import { BottomStationNav } from './components/BottomStationNav';
+import { CarriageGallery } from './components/CarriageGallery';
+import { CulturalBlessing } from './components/CulturalBlessing';
+import { RsvpAndWishes } from './components/RsvpAndWishes';
+import { StationCountdown } from './components/StationCountdown';
+import { TrackDivider } from './components/StorybookIllustrations';
+import { TicketBoothGift } from './components/TicketBoothGift';
+import { VenueAndRundown } from './components/VenueAndRundown';
+import { playTrainWhistle, toggleBackgroundMusic, setBackgroundMusicUrl } from './utils/sound';
+import { AuthProvider } from './context/AuthContext';
+import { InvitationProvider, useInvitationData } from './context/InvitationContext';
 
-export default function App() {
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+const AdminPage = React.lazy(() =>
+  import('./components/admin/AdminPage').then((mod) => ({ default: mod.AdminPage }))
+);
+
+function MainInvitationContent({
+  onNavigateToAdmin,
+  showToast,
+}: {
+  onNavigateToAdmin: () => void;
+  showToast: (message: string) => void;
+}) {
+  const { invitationInfo, musicSettings } = useInvitationData();
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
-  const toastTimerRef = useRef<number | null>(null);
+
+  // Sync music URL from Supabase settings
+  useEffect(() => {
+    if (musicSettings.audio_url) {
+      setBackgroundMusicUrl(musicSettings.audio_url);
+    }
+  }, [musicSettings.audio_url]);
 
   const guestName = useMemo(() => {
     if (typeof window === 'undefined') return 'Keluarga & Sahabat Tercinta';
     const params = new URLSearchParams(window.location.search);
     const to = params.get('to')?.trim();
     return to && to.length > 0 ? to : 'Keluarga & Sahabat Tercinta';
-  }, []);
-
-  const showToast = useCallback((message: string) => {
-    setToastMessage(message);
-    if (toastTimerRef.current !== null) {
-      window.clearTimeout(toastTimerRef.current);
-    }
-    toastTimerRef.current = window.setTimeout(() => {
-      setToastMessage(null);
-    }, 2600);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (toastTimerRef.current !== null) {
-        window.clearTimeout(toastTimerRef.current);
-      }
-      toggleBackgroundMusic(false);
-    };
   }, []);
 
   const handlePlayWhistle = () => {
@@ -49,30 +48,29 @@ export default function App() {
 
   const handleToggleMusic = () => {
     const nextState = !isMusicPlaying;
-    const active = toggleBackgroundMusic(nextState);
+    const active = toggleBackgroundMusic(nextState, musicSettings.audio_url);
     setIsMusicPlaying(active);
-    showToast(active ? 'Musik kotak ceria diputar' : 'Musik latar dijeda');
+    showToast(active ? `Memutar: ${musicSettings.title}` : 'Musik latar dijeda');
   };
 
   const scrollToSection = (sectionId: string) => {
     const el = document.getElementById(sectionId);
     if (el) {
-      el.scrollIntoView({behavior: 'smooth', block: 'start'});
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
   const handleShareInvite = async () => {
-    const shareUrl = window.location.href;
-    const shareTitle = 'Undangan Walimatul Khitan — Faqih Al-Arif Billah';
-    const shareText =
-      'Assalamu’alaikum! Mari naik kereta petualangan menuju Walimatul Khitan Faqih Al-Arif Billah pada Sabtu, 19 Desember 2026 di Lumé Coffee, Tebet.';
+    const shareUrl = window.location.origin;
+    const shareTitle = `Undangan Walimatul Khitan — ${invitationInfo.child_name}`;
+    const shareText = `Assalamu’alaikum! Mari naik kereta petualangan menuju Walimatul Khitan ${invitationInfo.child_name} pada ${invitationInfo.event_day_date} di ${invitationInfo.event_venue}.`;
 
     if (navigator.share) {
       try {
-        await navigator.share({title: shareTitle, text: shareText, url: shareUrl});
+        await navigator.share({ title: shareTitle, text: shareText, url: shareUrl });
         return;
       } catch {
-        // User cancelled or native share unavailable; fall back to clipboard
+        // User cancelled or share unavailable; fallback to clipboard
       }
     }
 
@@ -155,7 +153,7 @@ export default function App() {
             <p className="text-xs text-[#5C403D] leading-relaxed mb-4">
               Merupakan suatu kehormatan dan kebahagiaan bagi kami apabila Bapak/Ibu/Saudara/i
               berkenan hadir serta memberikan doa restu untuk putra kami tercinta,{' '}
-              <span className="font-bold text-[#2B2D42]">Faqih Al-Arif Billah</span>.
+              <span className="font-bold text-[#2B2D42]">{invitationInfo.child_name}</span>.
             </p>
 
             <div className="bg-[#FFF9F2] rounded-2xl p-3.5 border border-[#FCBF49]/35 mb-4">
@@ -163,7 +161,7 @@ export default function App() {
                 Kami yang Berbahagia
               </p>
               <p className="text-sm font-extrabold text-[#2B2D42]">
-                Bpk. Dede Nurjaya &amp; Ibu Ruslinawati
+                {invitationInfo.parents_name}
               </p>
               <p className="text-xs text-[#5C403D] mt-1">
                 Beserta keluarga besar Jakarta Selatan
@@ -173,30 +171,31 @@ export default function App() {
             <button
               type="button"
               onClick={handleShareInvite}
-              className="btn-tactile-gold min-h-[44px] px-5 py-2.5 rounded-full text-xs font-extrabold inline-flex items-center justify-center gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0]"
+              className="btn-tactile-gold min-h-[44px] px-5 py-2.5 rounded-full text-xs font-extrabold inline-flex items-center justify-center gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0] cursor-pointer"
             >
               <Share2 className="w-4 h-4 shrink-0" />
               <span>Bagikan Undangan</span>
             </button>
 
             <p className="text-[11px] text-[#906F6B] mt-5">
-              Choo-Choo Khitan Adventure · Sabtu, 19 Desember 2026
+              Choo-Choo Khitan Adventure · {invitationInfo.event_day_date}
             </p>
+
+            {/* Subtle Admin Access Link */}
+            <div className="mt-4 pt-3 border-t border-[#FCBF49]/20 flex justify-center">
+              <button
+                type="button"
+                onClick={onNavigateToAdmin}
+                className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#906F6B] hover:text-[#D62828] px-3 py-1.5 rounded-full hover:bg-[#FFDEA9]/30 transition-colors cursor-pointer"
+                title="Kelola Undangan (Khusus Admin)"
+              >
+                <Lock className="w-3 h-3" />
+                <span>Panel Admin</span>
+              </button>
+            </div>
           </div>
         </footer>
       </main>
-
-      {/* Micro-Toast Notification */}
-      {toastMessage && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-max max-w-[90vw] px-4 py-2.5 rounded-full bg-[#2B2D42] text-white text-xs font-bold shadow-xl border border-[#FCBF49]/70 flex items-center gap-2"
-        >
-          <Train className="w-4 h-4 text-[#FCBF49] shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
 
       {/* Sticky Bottom Station Navigation */}
       <BottomStationNav
@@ -205,5 +204,109 @@ export default function App() {
         onNavigate={scrollToSection}
       />
     </div>
+  );
+}
+
+export default function App() {
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+
+  // Routing state: detects /admin or #admin
+  const [currentPath, setCurrentPath] = useState<string>(() => {
+    if (typeof window === 'undefined') return '/';
+    const path = window.location.pathname;
+    const hash = window.location.hash;
+    if (path.startsWith('/admin') || hash.includes('admin')) {
+      return '/admin';
+    }
+    return '/';
+  });
+
+  const showToast = useCallback((message: string) => {
+    setToastMessage(message);
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+    }, 2800);
+  }, []);
+
+  const navigateTo = useCallback((targetPath: string) => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', targetPath);
+    }
+    setCurrentPath(targetPath);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      const hash = window.location.hash;
+      if (path.startsWith('/admin') || hash.includes('admin')) {
+        setCurrentPath('/admin');
+      } else {
+        setCurrentPath('/');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handlePopState);
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+      toggleBackgroundMusic(false);
+    };
+  }, []);
+
+  const isAdminRoute = currentPath.startsWith('/admin');
+
+  return (
+    <AuthProvider>
+      <InvitationProvider>
+        {isAdminRoute ? (
+          <Suspense
+            fallback={
+              <div className="min-h-screen bg-[#FFF9F2] flex flex-col items-center justify-center p-4">
+                <div className="w-16 h-16 rounded-3xl bg-[#D62828] text-white flex items-center justify-center shadow-lg border-[3px] border-[#FCBF49] mb-4">
+                  <Train className="w-8 h-8 text-[#FCBF49] animate-bounce" />
+                </div>
+                <div className="flex items-center gap-2 text-xs font-bold text-[#7D5800]">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#D62828]" />
+                  <span>Memuat Panel Admin...</span>
+                </div>
+              </div>
+            }
+          >
+            <AdminPage
+              onBackToSite={() => navigateTo('/')}
+              onShowToast={showToast}
+            />
+          </Suspense>
+        ) : (
+          <MainInvitationContent
+            onNavigateToAdmin={() => navigateTo('/admin')}
+            showToast={showToast}
+          />
+        )}
+
+        {/* Global Micro-Toast Notification */}
+        {toastMessage && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-max max-w-[90vw] px-4 py-2.5 rounded-full bg-[#2B2D42] text-white text-xs font-bold shadow-xl border border-[#FCBF49]/70 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200"
+          >
+            <Train className="w-4 h-4 text-[#FCBF49] shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+      </InvitationProvider>
+    </AuthProvider>
   );
 }

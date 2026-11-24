@@ -1,20 +1,11 @@
-import React, {useState} from 'react';
-import {Check, Copy, ExternalLink, MapPin, Pencil, RotateCcw, TrainFront} from 'lucide-react';
+import React, { useState } from 'react';
+import { Check, Copy, ExternalLink, MapPin, Pencil, RotateCcw, TrainFront } from 'lucide-react';
+import { useInvitationData } from '../context/InvitationContext';
 
 interface VenueAndRundownProps {
   onShowToast: (message: string) => void;
 }
 
-const VENUE_ADDRESS =
-  'Lumé Coffee, Jl. KH Abdullah Syafei No.7, RT.6/RW.2, Manggarai Sel., Kec. Tebet, Kota Jakarta Selatan, DKI Jakarta 12860';
-const MAPS_URL =
-  'https://www.google.com/maps/search/?api=1&query=Lume+Coffee+Jl+KH+Abdullah+Syafei+No+7+Tebet+Jakarta+Selatan+12860';
-
-/**
- * PLACEHOLDER EMBED GOOGLE MAPS:
- * Ganti URL di bawah ini dengan link `src` dari Google Maps -> Bagikan -> Sematkan peta (Embed a map)
- * Contoh: "https://www.google.com/maps/embed?pb=!1m18!..."
- */
 const DEFAULT_GOOGLE_MAP_EMBED_PLACEHOLDER =
   'https://maps.google.com/maps?q=Lume%20Coffee%20Jl.%20KH%20Abdullah%20Syafei%20No.7%20Tebet%20Jakarta%20Selatan&t=&z=16&ie=UTF8&iwloc=&output=embed';
 
@@ -122,8 +113,10 @@ const SCHEDULE_STOPS = [
   },
 ];
 
-export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({onShowToast}) => {
-  const [embedUrl, setEmbedUrl] = useState<string>(() => {
+export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({ onShowToast }) => {
+  const { invitationInfo } = useInvitationData();
+
+  const [localEmbedUrl, setLocalEmbedUrl] = useState<string>(() => {
     if (typeof window === 'undefined') return DEFAULT_GOOGLE_MAP_EMBED_PLACEHOLDER;
     try {
       const saved = window.localStorage.getItem(MAP_STORAGE_KEY);
@@ -132,15 +125,26 @@ export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({onShowToast}) =
       return DEFAULT_GOOGLE_MAP_EMBED_PLACEHOLDER;
     }
   });
+
+  const effectiveEmbedUrl =
+    invitationInfo.maps_embed_url || localEmbedUrl || DEFAULT_GOOGLE_MAP_EMBED_PLACEHOLDER;
+  const effectiveAddress =
+    invitationInfo.event_address ||
+    'Lumé Coffee, Jl. KH Abdullah Syafei No.7, RT.6/RW.2, Manggarai Sel., Kec. Tebet, Kota Jakarta Selatan, DKI Jakarta 12860';
+  const effectiveMapsUrl =
+    invitationInfo.maps_url ||
+    'https://www.google.com/maps/search/?api=1&query=Lume+Coffee+Jl+KH+Abdullah+Syafei+No+7+Tebet+Jakarta+Selatan+12860';
+  const effectiveVenue = invitationInfo.event_venue || 'Lumé Coffee';
+
   const [isEditingMap, setIsEditingMap] = useState(false);
   const [mapInput, setMapInput] = useState('');
 
   const handleCopyAddress = async () => {
     try {
-      await navigator.clipboard.writeText(VENUE_ADDRESS);
-      onShowToast('Alamat Lumé Coffee tersalin!');
+      await navigator.clipboard.writeText(effectiveAddress);
+      onShowToast(`Alamat ${effectiveVenue} tersalin!`);
     } catch {
-      onShowToast('Alamat: Jl. KH Abdullah Syafei No.7, Tebet');
+      onShowToast(`Alamat: ${effectiveAddress}`);
     }
   };
 
@@ -151,7 +155,7 @@ export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({onShowToast}) =
       onShowToast('Tempel link embed atau kode <iframe> Google Maps yang valid.');
       return;
     }
-    setEmbedUrl(validSrc);
+    setLocalEmbedUrl(validSrc);
     try {
       window.localStorage.setItem(MAP_STORAGE_KEY, validSrc);
     } catch {
@@ -163,7 +167,7 @@ export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({onShowToast}) =
   };
 
   const handleResetEmbed = () => {
-    setEmbedUrl(DEFAULT_GOOGLE_MAP_EMBED_PLACEHOLDER);
+    setLocalEmbedUrl(DEFAULT_GOOGLE_MAP_EMBED_PLACEHOLDER);
     try {
       window.localStorage.removeItem(MAP_STORAGE_KEY);
     } catch {
@@ -181,7 +185,7 @@ export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({onShowToast}) =
         <div className="flex items-center gap-2 mb-1">
           <TrainFront className="w-4 h-4 text-[#D62828]" />
           <p className="text-[11px] font-bold tracking-[0.06em] uppercase text-[#7D5800]">
-            Rute Perjalanan Acara · Sabtu, 19 Des 2026
+            Rute Perjalanan Acara · {invitationInfo.event_day_date}
           </p>
         </div>
         <h2
@@ -230,7 +234,7 @@ export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({onShowToast}) =
           <button
             type="button"
             onClick={() => setIsEditingMap((v) => !v)}
-            className="min-h-[36px] px-2.5 py-1 rounded-full bg-[#FFF9F2] border border-[#FCBF49]/50 text-[11px] font-bold text-[#5C403D] inline-flex items-center gap-1 hover:bg-[#FFDEA9]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0]"
+            className="min-h-[36px] px-2.5 py-1 rounded-full bg-[#FFF9F2] border border-[#FCBF49]/50 text-[11px] font-bold text-[#5C403D] inline-flex items-center gap-1 hover:bg-[#FFDEA9]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0] cursor-pointer"
           >
             <Pencil className="w-3 h-3 text-[#D62828]" />
             <span>{isEditingMap ? 'Tutup' : 'Ganti Embed'}</span>
@@ -238,14 +242,14 @@ export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({onShowToast}) =
         </div>
 
         <h3 className="text-lg font-extrabold text-[#2B2D42] mb-3">
-          Lumé Coffee · Tebet
+          {effectiveVenue}
         </h3>
 
         {/* Google Maps Embed Frame */}
         <div className="w-full h-[220px] rounded-2xl overflow-hidden border-2 border-[#FCBF49]/45 bg-[#F4F2FF] relative">
           <iframe
-            title="Google Maps Lokasi Lumé Coffee Tebet Jakarta Selatan"
-            src={embedUrl}
+            title={`Google Maps Lokasi ${effectiveVenue}`}
+            src={effectiveEmbedUrl}
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
             allowFullScreen
@@ -276,7 +280,7 @@ export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({onShowToast}) =
             <div className="flex items-center gap-2">
               <button
                 type="submit"
-                className="min-h-[40px] px-3.5 rounded-full bg-[#D62828] text-white text-xs font-bold inline-flex items-center gap-1.5 hover:bg-[#E63946]"
+                className="min-h-[40px] px-3.5 rounded-full bg-[#D62828] text-white text-xs font-bold inline-flex items-center gap-1.5 hover:bg-[#E63946] cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Pasang Peta</span>
@@ -284,7 +288,7 @@ export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({onShowToast}) =
               <button
                 type="button"
                 onClick={handleResetEmbed}
-                className="min-h-[40px] px-3 rounded-full bg-white border border-[#E5BDB9] text-[#5C403D] text-xs font-bold inline-flex items-center gap-1 hover:bg-[#FFF1EF]"
+                className="min-h-[40px] px-3 rounded-full bg-white border border-[#E5BDB9] text-[#5C403D] text-xs font-bold inline-flex items-center gap-1 hover:bg-[#FFF1EF] cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Reset</span>
@@ -294,13 +298,12 @@ export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({onShowToast}) =
         )}
 
         <p className="text-xs text-[#5C403D] mt-3 leading-relaxed">
-          Jl. KH Abdullah Syafei No.7, RT.6/RW.2, Manggarai Sel., Kec. Tebet, Kota Jakarta
-          Selatan, DKI Jakarta 12860.
+          {effectiveAddress}
         </p>
 
         <div className="grid grid-cols-2 gap-2.5 mt-4">
           <a
-            href={MAPS_URL}
+            href={effectiveMapsUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="btn-tactile-red min-h-[44px] px-3 py-2.5 rounded-full font-bold text-xs flex items-center justify-center gap-1.5 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0]"
@@ -312,7 +315,7 @@ export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({onShowToast}) =
           <button
             type="button"
             onClick={handleCopyAddress}
-            className="min-h-[44px] px-3 py-2.5 rounded-full border border-[#2B2D42]/20 bg-[#FFF9F2] text-[#2B2D42] font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-[#FFDEA9]/40 active:scale-[0.98] transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0]"
+            className="min-h-[44px] px-3 py-2.5 rounded-full border border-[#2B2D42]/20 bg-[#FFF9F2] text-[#2B2D42] font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-[#FFDEA9]/40 active:scale-[0.98] transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0] cursor-pointer"
           >
             <Copy className="w-3.5 h-3.5 shrink-0" />
             <span>Salin Alamat</span>

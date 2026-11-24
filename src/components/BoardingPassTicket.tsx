@@ -1,7 +1,8 @@
-import React, {useRef, useState} from 'react';
-import {CalendarPlus, Camera, MapPin, RotateCcw, Ticket, Volume2} from 'lucide-react';
-import {BuntingPennants, HeroSteamLocomotive} from './StorybookIllustrations';
-import {downloadCalendarInvite} from '../utils/calendar';
+import React, { useRef, useState } from 'react';
+import { CalendarPlus, Camera, MapPin, RotateCcw, Ticket, Volume2 } from 'lucide-react';
+import { BuntingPennants, HeroSteamLocomotive } from './StorybookIllustrations';
+import { downloadCalendarInvite } from '../utils/calendar';
+import { useInvitationData } from '../context/InvitationContext';
 
 interface BoardingPassTicketProps {
   guestName: string;
@@ -18,8 +19,10 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
   onPlayWhistle,
   onShowToast,
 }) => {
+  const { invitationInfo } = useInvitationData();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [heroPhoto, setHeroPhoto] = useState<string | null>(() => {
+
+  const [localHeroPhoto, setLocalHeroPhoto] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     try {
       return window.localStorage.getItem(PHOTO_STORAGE_KEY);
@@ -27,6 +30,9 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
       return null;
     }
   });
+
+  // Effective hero photo: Supabase info takes priority if available, otherwise local override
+  const effectiveHeroPhoto = invitationInfo.hero_photo_url || localHeroPhoto;
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -40,11 +46,11 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
     reader.onload = () => {
       const result = typeof reader.result === 'string' ? reader.result : null;
       if (!result) return;
-      setHeroPhoto(result);
+      setLocalHeroPhoto(result);
       try {
         window.localStorage.setItem(PHOTO_STORAGE_KEY, result);
       } catch {
-        // Ignore localStorage quota overflow for large photos
+        // Ignore quota errors
       }
       onShowToast('Foto Faqih berhasil dipasang di bingkai kereta!');
     };
@@ -53,7 +59,7 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
   };
 
   const handleRemovePhoto = () => {
-    setHeroPhoto(null);
+    setLocalHeroPhoto(null);
     try {
       window.localStorage.removeItem(PHOTO_STORAGE_KEY);
     } catch {
@@ -64,11 +70,9 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
 
   const handleSaveCalendar = () => {
     downloadCalendarInvite({
-      title: 'Walimatul Khitan Faqih Al-Arif Billah',
-      description:
-        'Mohon doa restu dan kehadiran Bapak/Ibu/Saudara/i pada acara Walimatul Khitan putra kami, Faqih Al-Arif Billah (putra Bpk. Dede Nurjaya & Ibu Ruslinawati).',
-      location:
-        'Lumé Coffee, Jl. KH Abdullah Syafei No.7, RT.6/RW.2, Manggarai Selatan, Kec. Tebet, Kota Jakarta Selatan 12860',
+      title: `Walimatul Khitan ${invitationInfo.child_name || 'Faqih Al-Arif Billah'}`,
+      description: `Mohon doa restu dan kehadiran Bapak/Ibu/Saudara/i pada acara Walimatul Khitan putra kami, ${invitationInfo.child_name || 'Faqih Al-Arif Billah'} (putra ${invitationInfo.parents_name || 'Bpk. Dede Nurjaya & Ibu Ruslinawati'}).`,
+      location: invitationInfo.event_address || 'Lumé Coffee, Tebet, Jakarta Selatan',
       startIso: '20261219T110000Z',
       endIso: '20261219T170000Z',
     });
@@ -108,7 +112,7 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
           <button
             type="button"
             onClick={onPlayWhistle}
-            className="min-h-[44px] min-w-[44px] px-3 rounded-full bg-[#FCBF49] text-[#271900] font-bold text-xs flex items-center gap-1.5 shrink-0 hover:bg-[#ffd06b] active:scale-95 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0]"
+            className="min-h-[44px] min-w-[44px] px-3 rounded-full bg-[#FCBF49] text-[#271900] font-bold text-xs flex items-center gap-1.5 shrink-0 hover:bg-[#ffd06b] active:scale-95 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0] cursor-pointer"
             aria-label="Bunyikan peluit kereta uap"
           >
             <Volume2 className="w-4 h-4 shrink-0" />
@@ -124,7 +128,7 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
             accept="image/*"
             onChange={handlePhotoChange}
             className="hidden"
-            aria-label="Unggah foto Faqih Al-Arif Billah"
+            aria-label={`Unggah foto ${invitationInfo.child_name}`}
           />
 
           {/* Train-ornamented Photo Frame */}
@@ -155,14 +159,14 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="group relative block w-full aspect-[4/4.4] rounded-t-[82px] rounded-b-[20px] overflow-hidden border-[3px] border-[#FCBF49] bg-[#FFF9F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0]"
-                aria-label={heroPhoto ? 'Ganti foto Faqih' : 'Tambah foto Faqih'}
+                className="group relative block w-full aspect-[4/4.4] rounded-t-[82px] rounded-b-[20px] overflow-hidden border-[3px] border-[#FCBF49] bg-[#FFF9F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0] cursor-pointer"
+                aria-label={effectiveHeroPhoto ? 'Ganti foto Faqih' : 'Tambah foto Faqih'}
               >
-                {heroPhoto ? (
+                {effectiveHeroPhoto ? (
                   <>
                     <img
-                      src={heroPhoto}
-                      alt="Foto Faqih Al-Arif Billah"
+                      src={effectiveHeroPhoto}
+                      alt={`Foto ${invitationInfo.child_name}`}
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover"
                     />
@@ -177,7 +181,7 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
                       <Camera className="w-5 h-5 text-[#D62828]" />
                     </div>
                     <span className="text-xs font-extrabold text-[#2B2D42] leading-snug">
-                      Tambah Foto Faqih
+                      Foto {invitationInfo.child_name}
                     </span>
                     <span className="text-[11px] text-[#5C403D] mt-0.5">
                       Ketuk bingkai kereta ini
@@ -192,8 +196,8 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
               <HeroSteamLocomotive className="w-full max-w-[238px] mx-auto drop-shadow-xs" />
             </div>
 
-            {/* Subtle photo actions when uploaded */}
-            {heroPhoto && (
+            {/* Subtle photo actions when uploaded locally */}
+            {localHeroPhoto && (
               <div className="mt-1 flex items-center justify-center gap-2">
                 <button
                   type="button"
@@ -216,12 +220,12 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
           </div>
 
           <h1 className="text-[28px] leading-[34px] font-extrabold text-[#2B2D42] tracking-[-0.015em] [text-wrap:balance]">
-            Faqih Al-Arif Billah
+            {invitationInfo.child_name}
           </h1>
           <p className="mt-1.5 text-sm font-medium text-[#5C403D]">
             Putra tercinta dari{' '}
             <span className="font-bold text-[#2B2D42]">
-              Bpk. Dede Nurjaya &amp; Ibu Ruslinawati
+              {invitationInfo.parents_name}
             </span>
           </p>
         </div>
@@ -246,11 +250,11 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
               <p className="text-[11px] font-bold tracking-[0.05em] uppercase text-[#7D5800]">
                 Tanggal Berangkat
               </p>
-              <p className="text-sm font-extrabold text-[#2B2D42] mt-0.5">
-                Sabtu, 19 Des 2026
+              <p className="text-sm font-extrabold text-[#2B2D42] mt-0.5 line-clamp-1">
+                {invitationInfo.event_day_date}
               </p>
-              <p className="text-xs text-[#5C403D] mt-0.5 tabular-nums">
-                18.00 – 00.00 WIB
+              <p className="text-xs text-[#5C403D] mt-0.5 tabular-nums line-clamp-1">
+                {invitationInfo.event_time}
               </p>
             </div>
 
@@ -258,12 +262,12 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
               <p className="text-[11px] font-bold tracking-[0.05em] uppercase text-[#7D5800]">
                 Stasiun Tujuan
               </p>
-              <p className="text-sm font-extrabold text-[#2B2D42] mt-0.5 leading-snug">
-                Lumé Coffee
+              <p className="text-sm font-extrabold text-[#2B2D42] mt-0.5 leading-snug line-clamp-1">
+                {invitationInfo.event_venue}
               </p>
-              <p className="text-xs text-[#5C403D] mt-0.5 flex items-center gap-1">
+              <p className="text-xs text-[#5C403D] mt-0.5 flex items-center gap-1 line-clamp-1">
                 <MapPin className="w-3 h-3 text-[#D62828] shrink-0" />
-                <span>Tebet, Jakarta Selatan</span>
+                <span className="truncate">{invitationInfo.event_venue}</span>
               </p>
             </div>
           </div>
@@ -272,7 +276,7 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
             <button
               type="button"
               onClick={onJumpToRsvp}
-              className="btn-tactile-red w-full min-h-[48px] px-5 py-3 rounded-full font-bold text-sm flex items-center justify-center gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0] focus-visible:ring-offset-2"
+              className="btn-tactile-red w-full min-h-[48px] px-5 py-3 rounded-full font-bold text-sm flex items-center justify-center gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0] focus-visible:ring-offset-2 cursor-pointer"
             >
               <Ticket className="w-4 h-4 shrink-0" />
               <span>Konfirmasi Kehadiran</span>
@@ -281,7 +285,7 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
             <button
               type="button"
               onClick={handleSaveCalendar}
-              className="w-full min-h-[44px] px-4 py-2.5 rounded-full border-2 border-dashed border-[#7D5800]/45 bg-[#FFDEA9]/25 text-[#5E4100] font-bold text-xs tracking-wide uppercase flex items-center justify-center gap-2 hover:bg-[#FFDEA9]/45 active:scale-[0.99] transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0]"
+              className="w-full min-h-[44px] px-4 py-2.5 rounded-full border-2 border-dashed border-[#7D5800]/45 bg-[#FFDEA9]/25 text-[#5E4100] font-bold text-xs tracking-wide uppercase flex items-center justify-center gap-2 hover:bg-[#FFDEA9]/45 active:scale-[0.99] transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0] cursor-pointer"
             >
               <CalendarPlus className="w-4 h-4 shrink-0" />
               <span>Simpan ke Kalender</span>
