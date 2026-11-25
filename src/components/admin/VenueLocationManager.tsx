@@ -33,6 +33,7 @@ export const VenueLocationManager: React.FC<VenueLocationManagerProps> = ({ onSh
   const [isDeleting, setIsDeleting] = useState(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -55,8 +56,10 @@ export const VenueLocationManager: React.FC<VenueLocationManagerProps> = ({ onSh
     }
 
     setSelectedFile(file);
+    setStatusError(null);
     const objectUrl = URL.createObjectURL(file);
     setPreviewUrl(objectUrl);
+    e.target.value = '';
   };
 
   // Upload or replace photo
@@ -67,30 +70,24 @@ export const VenueLocationManager: React.FC<VenueLocationManagerProps> = ({ onSh
       onShowToast('Silakan pilih foto lokasi dari perangkat Anda.');
       return;
     }
+    if (selectedFile && !isSupabaseConfigured) {
+      onShowToast('Supabase belum dikonfigurasi; foto lokasi tidak dapat diunggah.');
+      return;
+    }
 
     setIsUploading(true);
+    setStatusError(null);
+    let uploadedPath: string | null = null;
+    let locationSaved = false;
     try {
       let finalPhotoUrl = currentPhotoUrl;
       let finalPhotoPath = currentPhotoPath;
 
-      // If a new file is selected, upload to Supabase Storage
-      if (selectedFile && isSupabaseConfigured) {
+      if (selectedFile) {
         const uploadResult = await uploadFileToStorage(selectedFile, 'venue');
-
-        // Delete old photo file if exists and replaced
-        if (currentPhotoPath) {
-          try {
-            await deleteFileFromStorage(currentPhotoPath);
-          } catch {
-            // Ignore error deleting old file
-          }
-        }
-
+        uploadedPath = uploadResult.path;
         finalPhotoUrl = uploadResult.publicUrl;
         finalPhotoPath = uploadResult.path;
-      } else if (selectedFile && !isSupabaseConfigured) {
-        // Fallback local preview
-        finalPhotoUrl = previewUrl;
       }
 
       await updateVenueLocation({
@@ -98,12 +95,37 @@ export const VenueLocationManager: React.FC<VenueLocationManagerProps> = ({ onSh
         venue_photo_path: finalPhotoPath,
         venue_description: descriptionInput.trim(),
       });
+      locationSaved = true;
+
+      if (currentPhotoPath && currentPhotoPath !== finalPhotoPath) {
+        try {
+          await deleteFileFromStorage(currentPhotoPath);
+        } catch (cleanupError) {
+          const detail =
+            cleanupError instanceof Error ? cleanupError.message : 'Kesalahan tidak diketahui.';
+          setStatusError(`Perubahan tersimpan, tetapi file foto lama belum terhapus: ${detail}`);
+          onShowToast('Foto lokasi tersimpan, tetapi file foto lama belum terhapus.');
+          setSelectedFile(null);
+          setPreviewUrl(null);
+          return;
+        }
+      }
 
       onShowToast('Foto lokasi Lumé Coffee berhasil disimpan!');
       setSelectedFile(null);
       setPreviewUrl(null);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menyimpan foto lokasi.';
+      let msg = err instanceof Error ? err.message : 'Gagal menyimpan foto lokasi.';
+      if (uploadedPath && !locationSaved) {
+        try {
+          await deleteFileFromStorage(uploadedPath);
+        } catch (cleanupError) {
+          const detail =
+            cleanupError instanceof Error ? cleanupError.message : 'Kesalahan tidak diketahui.';
+          msg = `${msg} File yang gagal disimpan belum dapat dibersihkan: ${detail}`;
+        }
+      }
+      setStatusError(msg);
       onShowToast(msg);
     } finally {
       setIsUploading(false);
@@ -112,16 +134,30 @@ export const VenueLocationManager: React.FC<VenueLocationManagerProps> = ({ onSh
 
   // Delete photo
   const handleDeletePhoto = async () => {
+    if (!isSupabaseConfigured) {
+      onShowToast('Supabase belum dikonfigurasi; foto lokasi tidak dapat dihapus.');
+      return;
+    }
     setIsDeleting(true);
+    setStatusError(null);
     try {
-      if (currentPhotoPath && isSupabaseConfigured) {
-        await deleteFileFromStorage(currentPhotoPath);
-      }
-
       await updateVenueLocation({
         venue_photo_url: null,
         venue_photo_path: null,
       });
+
+      if (currentPhotoPath) {
+        try {
+          await deleteFileFromStorage(currentPhotoPath);
+        } catch (cleanupError) {
+          const detail =
+            cleanupError instanceof Error ? cleanupError.message : 'Kesalahan tidak diketahui.';
+          setStatusError(`Foto dihapus dari website, tetapi file Storage belum terhapus: ${detail}`);
+          setIsConfirmDeleteOpen(false);
+          onShowToast('Foto dihapus dari website, tetapi file Storage belum terhapus.');
+          return;
+        }
+      }
 
       setSelectedFile(null);
       setPreviewUrl(null);
@@ -129,6 +165,7 @@ export const VenueLocationManager: React.FC<VenueLocationManagerProps> = ({ onSh
       onShowToast('Foto lokasi berhasil dihapus dari sistem.');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal menghapus foto lokasi.';
+      setStatusError(msg);
       onShowToast(msg);
     } finally {
       setIsDeleting(false);
@@ -160,6 +197,11 @@ export const VenueLocationManager: React.FC<VenueLocationManagerProps> = ({ onSh
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {statusError && (
+          <div role="alert" className="lg:col-span-12 p-3 rounded-xl bg-[#FFEAE8] border border-[#FFCCD0] text-xs text-[#A61E1E]">
+            {statusError}
+          </div>
+        )}
         {/* Left Column: Photo Preview & Upload Form */}
         <div className="lg:col-span-7 space-y-4">
           <form

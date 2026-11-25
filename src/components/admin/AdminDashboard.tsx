@@ -10,6 +10,8 @@ import {
   Shield,
   Sparkles,
   RefreshCw,
+  MapPin,
+  ListOrdered,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useInvitationData } from '../../context/InvitationContext';
@@ -17,8 +19,10 @@ import { GalleryManager } from './GalleryManager';
 import { InvitationInfoManager } from './InvitationInfoManager';
 import { MusicManager } from './MusicManager';
 import { SupabaseGuideModal } from './SupabaseGuideModal';
+import { VenueLocationManager } from './VenueLocationManager';
+import { RundownManager } from './RundownManager';
 
-type ActiveTab = 'galeri' | 'info' | 'musik';
+type ActiveTab = 'galeri' | 'info' | 'musik' | 'lokasi' | 'rundown';
 
 interface AdminDashboardProps {
   onViewSite: () => void;
@@ -30,16 +34,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onShowToast,
 }) => {
   const { user, signOut } = useAuth();
-  const { isSupabaseConfigured, refreshData, isLoading } = useInvitationData();
+  const { isSupabaseConfigured, refreshData, isLoading, dataError } = useInvitationData();
   const [activeTab, setActiveTab] = useState<ActiveTab>('galeri');
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await refreshData();
-    setIsRefreshing(false);
-    onShowToast('Data berhasil diperbarui dari Supabase.');
+    try {
+      await refreshData();
+      onShowToast('Data berhasil diperbarui dari Supabase.');
+    } catch (error) {
+      onShowToast(error instanceof Error ? error.message : 'Gagal memuat data Supabase.');
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -141,6 +150,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </button>
           </div>
         )}
+        {dataError && (
+          <div role="alert" className="p-4 rounded-2xl bg-[#FFEAE8] border border-[#FFCCD0] text-xs text-[#A61E1E]">
+            Gagal memuat data dari Supabase: {dataError}
+          </div>
+        )}
 
         {/* Navigation Tabs Bar */}
         <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-white border border-[#FCBF49]/40 shadow-xs overflow-x-auto">
@@ -182,6 +196,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <Music className="w-4 h-4" />
             <span>C. Kelola Musik</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('lokasi')}
+            className={`min-h-[44px] px-5 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'lokasi'
+                ? 'bg-[#D62828] text-white shadow-xs'
+                : 'text-[#5C403D] hover:text-[#2B2D42] hover:bg-[#FFF9F2]'
+            }`}
+          >
+            <MapPin className="w-4 h-4" />
+            <span>D. Kelola Lokasi Acara</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('rundown')}
+            className={`min-h-[44px] px-5 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'rundown'
+                ? 'bg-[#D62828] text-white shadow-xs'
+                : 'text-[#5C403D] hover:text-[#2B2D42] hover:bg-[#FFF9F2]'
+            }`}
+          >
+            <ListOrdered className="w-4 h-4" />
+            <span>E. Kelola Rundown</span>
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -189,6 +227,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {activeTab === 'galeri' && <GalleryManager onShowToast={onShowToast} />}
           {activeTab === 'info' && <InvitationInfoManager onShowToast={onShowToast} />}
           {activeTab === 'musik' && <MusicManager onShowToast={onShowToast} />}
+          {activeTab === 'lokasi' && <VenueLocationManager onShowToast={onShowToast} />}
+          {activeTab === 'rundown' && <RundownManager onShowToast={onShowToast} />}
         </div>
       </main>
 

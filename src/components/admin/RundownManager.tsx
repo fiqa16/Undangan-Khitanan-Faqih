@@ -15,10 +15,8 @@ import {
   EyeOff,
   Loader2,
   AlertCircle,
-  RotateCcw,
-  BookOpen,
 } from 'lucide-react';
-import { useInvitationData, DEFAULT_RUNDOWN_ITEMS } from '../../context/InvitationContext';
+import { useInvitationData } from '../../context/InvitationContext';
 import { RundownItem } from '../../utils/supabase';
 
 interface RundownManagerProps {
@@ -56,10 +54,10 @@ export const RundownManager: React.FC<RundownManagerProps> = ({ onShowToast }) =
   // Open Add Modal
   const handleOpenAdd = () => {
     setFormActivityName('');
-    setFormStartTime('18.00');
-    setFormEndTime('19.00');
-    setFormDuration('1 jam');
-    setFormDescription('Keluarga Besar & Tamu Undangan');
+    setFormStartTime('');
+    setFormEndTime('');
+    setFormDuration('');
+    setFormDescription('');
     setIsAddModalOpen(true);
   };
 
@@ -140,7 +138,11 @@ export const RundownManager: React.FC<RundownManagerProps> = ({ onShowToast }) =
     const temp = newItems[index];
     newItems[index] = newItems[index - 1];
     newItems[index - 1] = temp;
-    await reorderRundownItems(newItems);
+    try {
+      await reorderRundownItems(newItems);
+    } catch (err: unknown) {
+      onShowToast(err instanceof Error ? err.message : 'Gagal mengubah urutan rundown.');
+    }
   };
 
   // Move Down
@@ -150,7 +152,11 @@ export const RundownManager: React.FC<RundownManagerProps> = ({ onShowToast }) =
     const temp = newItems[index];
     newItems[index] = newItems[index + 1];
     newItems[index + 1] = temp;
-    await reorderRundownItems(newItems);
+    try {
+      await reorderRundownItems(newItems);
+    } catch (err: unknown) {
+      onShowToast(err instanceof Error ? err.message : 'Gagal mengubah urutan rundown.');
+    }
   };
 
   // Confirm Delete
@@ -182,27 +188,6 @@ export const RundownManager: React.FC<RundownManagerProps> = ({ onShowToast }) =
     }
   };
 
-  // Reset to initial discussion draft
-  const handleLoadDraftTemplate = async () => {
-    try {
-      for (const item of DEFAULT_RUNDOWN_ITEMS) {
-        await addRundownItem({
-          activity_name: item.activity_name,
-          start_time: item.start_time,
-          end_time: item.end_time || null,
-          duration: item.duration || null,
-          description: item.description || null,
-          order_index: item.order_index,
-          is_published: false,
-        });
-      }
-      onShowToast('Draf 11 kegiatan pembahasan berhasil dimuat.');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal memuat template draf.';
-      onShowToast(msg);
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Action Header */}
@@ -213,7 +198,7 @@ export const RundownManager: React.FC<RundownManagerProps> = ({ onShowToast }) =
             <h2 className="text-base font-extrabold text-[#2B2D42]">
               Kelola Rundown Acara ({rundownItems.length} Kegiatan)
             </h2>
-            {allPublished ? (
+            {hasPublishedItems ? (
               <span className="px-2.5 py-0.5 rounded-full bg-[#EBFBEE] text-[#2B8A3E] border border-[#B2F2BB] text-[10px] font-extrabold flex items-center gap-1">
                 <Eye className="w-3 h-3" />
                 <span>Terbit di Website</span>
@@ -279,18 +264,8 @@ export const RundownManager: React.FC<RundownManagerProps> = ({ onShowToast }) =
             Tahap Diskusi Jadwal:
           </p>
           <p className="text-[11px] leading-relaxed">
-            Karena rundown masih dalam tahap diskusi, jadwal tidak akan ditampilkan di website utama sampai Anda memutuskan untuk mempublikasikannya. Website akan menampilkan pesan pemberitahuan ramah bahwa jadwal sedang difinalisasi oleh keluarga.
+            Jadwal draf tidak ditampilkan di website utama. Masukkan susunan final sendiri, lalu publikasikan saat sudah siap.
           </p>
-          {rundownItems.length === 0 && (
-            <button
-              type="button"
-              onClick={handleLoadDraftTemplate}
-              className="mt-1 text-xs font-bold text-[#D62828] hover:underline inline-flex items-center gap-1"
-            >
-              <BookOpen className="w-3 h-3" />
-              <span>Muat template draf 11 kegiatan awal untuk diedit</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -304,7 +279,7 @@ export const RundownManager: React.FC<RundownManagerProps> = ({ onShowToast }) =
             Belum Ada Kegiatan di Rundown
           </h3>
           <p className="text-xs text-[#5C403D] max-w-md mx-auto">
-            Tambahkan kegiatan acara satu per satu, atau gunakan draf pembahasan awal agar Anda tinggal menyesuaikan jam dan detailnya.
+            Belum ada kegiatan. Tambahkan jadwal final saat sudah disepakati.
           </p>
           <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
             <button
@@ -314,14 +289,6 @@ export const RundownManager: React.FC<RundownManagerProps> = ({ onShowToast }) =
             >
               <Plus className="w-4 h-4" />
               <span>Tambah Kegiatan</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleLoadDraftTemplate}
-              className="min-h-[38px] px-4 rounded-full bg-[#FFF9F2] hover:bg-[#FFDEA9]/50 border border-[#FCBF49]/60 text-xs font-bold text-[#7D5800] inline-flex items-center gap-1.5"
-            >
-              <BookOpen className="w-4 h-4" />
-              <span>Muat Draf Awal (11 Kegiatan)</span>
             </button>
           </div>
         </div>

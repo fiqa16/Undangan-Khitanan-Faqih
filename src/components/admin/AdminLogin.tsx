@@ -11,7 +11,6 @@ import {
   Copy,
   Check,
   ShieldAlert,
-  Code,
 } from 'lucide-react';
 import { useAuth, AdminDebugInfo } from '../../context/AuthContext';
 import { isSupabaseConfigured } from '../../utils/supabase';
@@ -19,17 +18,6 @@ import { isSupabaseConfigured } from '../../utils/supabase';
 interface AdminLoginProps {
   onBackToSite: () => void;
 }
-
-const SQL_FIX_COMMAND = `GRANT USAGE ON SCHEMA public TO anon, authenticated;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
-GRANT SELECT ON public.invitation_info TO anon;
-GRANT SELECT ON public.gallery_photos TO anon;
-GRANT SELECT ON public.music_settings TO anon;
-GRANT SELECT ON public.admin_users TO authenticated;
-GRANT SELECT ON public.admin_users TO anon;
-
-DROP POLICY IF EXISTS "Allow authenticated read admin_users" ON public.admin_users;
-CREATE POLICY "Allow authenticated read admin_users" ON public.admin_users FOR SELECT TO authenticated USING (true);`;
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToSite }) => {
   const { signIn } = useAuth();
@@ -40,7 +28,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToSite }) => {
   const [debugInfo, setDebugInfo] = useState<AdminDebugInfo | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedUid, setCopiedUid] = useState(false);
-  const [copiedSql, setCopiedSql] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,14 +60,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToSite }) => {
       navigator.clipboard.writeText(uid);
       setCopiedUid(true);
       setTimeout(() => setCopiedUid(false), 2000);
-    }
-  };
-
-  const handleCopySql = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(SQL_FIX_COMMAND);
-      setCopiedSql(true);
-      setTimeout(() => setCopiedSql(false), 2000);
     }
   };
 
@@ -188,19 +167,9 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToSite }) => {
                 <div className="bg-[#FFF3CD] p-3 rounded-xl border border-[#FFEEBA] text-[11px] text-[#856404] space-y-2">
                   <p className="font-bold">Solusi Izin Database (Error 42501):</p>
                   <p>
-                    Tabel <code>admin_users</code> belum memiliki izin SELECT untuk peran <code>authenticated</code>.
-                    Jalankan perintah SQL ini di Supabase SQL Editor:
+                    Jalankan file <code>supabase-security-update.sql</code> di Supabase SQL Editor.
+                    Jangan gunakan perintah GRANT ALL atau policy yang mengizinkan semua user login.
                   </p>
-                  <div className="relative bg-[#2B2D42] text-white p-2.5 rounded-lg font-mono text-[10px] overflow-x-auto">
-                    <button
-                      type="button"
-                      onClick={handleCopySql}
-                      className="absolute top-2 right-2 px-2 py-0.5 rounded bg-[#FCBF49] text-[#2B2D42] font-bold text-[9px] cursor-pointer"
-                    >
-                      {copiedSql ? 'Tersalin!' : 'Salin SQL'}
-                    </button>
-                    <pre className="whitespace-pre">{SQL_FIX_COMMAND}</pre>
-                  </div>
                 </div>
               )}
 

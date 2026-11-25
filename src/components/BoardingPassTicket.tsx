@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { CalendarPlus, Camera, MapPin, RotateCcw, Ticket, Volume2 } from 'lucide-react';
+import React from 'react';
+import { CalendarPlus, Camera, MapPin, Ticket, Volume2 } from 'lucide-react';
 import { BuntingPennants, HeroSteamLocomotive } from './StorybookIllustrations';
 import { downloadCalendarInvite } from '../utils/calendar';
 import { useInvitationData } from '../context/InvitationContext';
@@ -11,8 +11,6 @@ interface BoardingPassTicketProps {
   onShowToast: (message: string) => void;
 }
 
-const PHOTO_STORAGE_KEY = 'choo_choo_faqih_hero_photo_v1';
-
 export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
   guestName,
   onJumpToRsvp,
@@ -20,53 +18,6 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
   onShowToast,
 }) => {
   const { invitationInfo } = useInvitationData();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const [localHeroPhoto, setLocalHeroPhoto] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      return window.localStorage.getItem(PHOTO_STORAGE_KEY);
-    } catch {
-      return null;
-    }
-  });
-
-  // Effective hero photo: Supabase info takes priority if available, otherwise local override
-  const effectiveHeroPhoto = invitationInfo.hero_photo_url || localHeroPhoto;
-
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      onShowToast('Pilih file gambar (JPG/PNG) untuk foto Faqih.');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : null;
-      if (!result) return;
-      setLocalHeroPhoto(result);
-      try {
-        window.localStorage.setItem(PHOTO_STORAGE_KEY, result);
-      } catch {
-        // Ignore quota errors
-      }
-      onShowToast('Foto Faqih berhasil dipasang di bingkai kereta!');
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  };
-
-  const handleRemovePhoto = () => {
-    setLocalHeroPhoto(null);
-    try {
-      window.localStorage.removeItem(PHOTO_STORAGE_KEY);
-    } catch {
-      // Ignore storage error
-    }
-    onShowToast('Foto dikembalikan ke tampilan awal.');
-  };
 
   const handleSaveCalendar = () => {
     downloadCalendarInvite({
@@ -122,15 +73,6 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
 
         {/* Upper Ticket Section: Train-Decorated Photo Frame + Boy's Hero Name */}
         <div className="px-5 pt-4 pb-5 text-center bg-gradient-to-b from-[#E4F6FF]/55 to-white">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handlePhotoChange}
-            className="hidden"
-            aria-label={`Unggah foto ${invitationInfo.child_name}`}
-          />
-
           {/* Train-ornamented Photo Frame */}
           <div className="relative max-w-[260px] mx-auto mb-3 pt-2">
             {/* Decorative steam puffs & stars around top of frame */}
@@ -156,39 +98,22 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
                 aria-hidden="true"
               />
 
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="group relative block w-full aspect-[4/4.4] rounded-t-[82px] rounded-b-[20px] overflow-hidden border-[3px] border-[#FCBF49] bg-[#FFF9F2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4CC9F0] cursor-pointer"
-                aria-label={effectiveHeroPhoto ? 'Ganti foto Faqih' : 'Tambah foto Faqih'}
-              >
-                {effectiveHeroPhoto ? (
-                  <>
-                    <img
-                      src={effectiveHeroPhoto}
-                      alt={`Foto ${invitationInfo.child_name}`}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
-                    />
-                    <span className="absolute inset-x-0 bottom-0 py-1.5 bg-[#2B2D42]/75 text-white text-[11px] font-bold flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                      <Camera className="w-3.5 h-3.5 text-[#FCBF49]" />
-                      <span>Ganti Foto</span>
-                    </span>
-                  </>
+              <div className="relative block w-full aspect-[4/4.4] rounded-t-[82px] rounded-b-[20px] overflow-hidden border-[3px] border-[#FCBF49] bg-[#FFF9F2]">
+                {invitationInfo.hero_photo_url ? (
+                  <img
+                    src={invitationInfo.hero_photo_url}
+                    alt={`Foto ${invitationInfo.child_name}`}
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center px-3 text-center bg-gradient-to-b from-[#E4F6FF]/70 to-[#FFF9F2]">
-                    <div className="w-12 h-12 rounded-full bg-[#FCBF49]/35 border-2 border-dashed border-[#D62828] flex items-center justify-center mb-2 group-hover:scale-105 transition-transform">
-                      <Camera className="w-5 h-5 text-[#D62828]" />
-                    </div>
+                    <Camera className="w-8 h-8 text-[#D62828] mb-2" />
                     <span className="text-xs font-extrabold text-[#2B2D42] leading-snug">
                       Foto {invitationInfo.child_name}
                     </span>
-                    <span className="text-[11px] text-[#5C403D] mt-0.5">
-                      Ketuk bingkai kereta ini
-                    </span>
                   </div>
                 )}
-              </button>
+              </div>
             </div>
 
             {/* Little Red Steam Train Ornament Riding Along the Frame Base */}
@@ -196,27 +121,6 @@ export const BoardingPassTicket: React.FC<BoardingPassTicketProps> = ({
               <HeroSteamLocomotive className="w-full max-w-[238px] mx-auto drop-shadow-xs" />
             </div>
 
-            {/* Subtle photo actions when uploaded locally */}
-            {localHeroPhoto && (
-              <div className="mt-1 flex items-center justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="min-h-[36px] px-3 py-1 rounded-full bg-[#FFF9F2] border border-[#FCBF49]/60 text-[11px] font-bold text-[#2B2D42] inline-flex items-center gap-1 hover:bg-[#FFDEA9]/40"
-                >
-                  <Camera className="w-3 h-3 text-[#D62828]" />
-                  <span>Ganti Foto</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRemovePhoto}
-                  className="min-h-[36px] px-3 py-1 rounded-full bg-[#FFF9F2] border border-[#E5BDB9] text-[11px] font-bold text-[#5C403D] inline-flex items-center gap-1 hover:bg-[#FFF1EF]"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Reset</span>
-                </button>
-              </div>
-            )}
           </div>
 
           <h1 className="text-[28px] leading-[34px] font-extrabold text-[#2B2D42] tracking-[-0.015em] [text-wrap:balance]">

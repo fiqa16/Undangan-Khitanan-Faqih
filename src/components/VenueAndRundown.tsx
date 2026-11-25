@@ -33,88 +33,11 @@ function extractGoogleMapsEmbedSrc(rawInput: string): string | null {
   }
 }
 
-const SCHEDULE_STOPS = [
-  {
-    stop: '01',
-    time: '18.00–19.00',
-    duration: '1 jam',
-    title: 'Kedatangan tamu undangan',
-    note: 'Keluarga Besar',
-  },
-  {
-    stop: '02',
-    time: '19.00–19.05',
-    duration: '5 menit',
-    title: 'Pembukaan oleh MC',
-    note: 'MC',
-  },
-  {
-    stop: '03',
-    time: '19.05–19.20',
-    duration: '15 menit',
-    title: "Pembacaan ayat suci Al-Qur'an",
-    note: 'Ua Hafsah',
-  },
-  {
-    stop: '04',
-    time: '19.20–19.40',
-    duration: '20 menit',
-    title: 'Sambutan dari orang tua',
-    note: 'Orang Tua',
-  },
-  {
-    stop: '05',
-    time: '19.40–20.00',
-    duration: '20 menit',
-    title: 'Tausiyah singkat',
-    note: 'Pak Ustad Ridwan',
-  },
-  {
-    stop: '06',
-    time: '20.00–20.15',
-    duration: '15 menit',
-    title: 'Doa bersama',
-    note: 'Pak Ustad Ridwan / Kakek',
-  },
-  {
-    stop: '07',
-    time: '20.15–20.45',
-    duration: '30 menit',
-    title: 'Penyampaian ucapan dan nasihat untuk anak yang dikhitan',
-    note: 'Nenek/Kakek, Om/Tante, dan keluarga lainnya',
-  },
-  {
-    stop: '08',
-    time: '20.45–20.55',
-    duration: '10 menit',
-    title: 'Foto bersama keluarga',
-    note: 'Keluarga Besar',
-  },
-  {
-    stop: '09',
-    time: '20.55–21.55',
-    duration: '60 menit',
-    title: 'Makan bersama',
-    note: 'Keluarga Besar',
-  },
-  {
-    stop: '10',
-    time: '21.55–23.55',
-    duration: '60 menit',
-    title: 'Karaoke dan Fun Time',
-    note: 'Keluarga Besar',
-  },
-  {
-    stop: '11',
-    time: '23.55–00.00',
-    duration: '5 menit',
-    title: 'Penutupan',
-    note: 'Orang Tua',
-  },
-];
-
 export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({ onShowToast }) => {
-  const { invitationInfo } = useInvitationData();
+  const { invitationInfo, rundownItems } = useInvitationData();
+  const publishedRundown = rundownItems
+    .filter((item) => item.is_published)
+    .sort((a, b) => a.order_index - b.order_index);
 
   const [localEmbedUrl, setLocalEmbedUrl] = useState<string>(() => {
     if (typeof window === 'undefined') return DEFAULT_GOOGLE_MAP_EMBED_PLACEHOLDER;
@@ -195,31 +118,46 @@ export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({ onShowToast })
           Susunan Acara &amp; Jadwal Kereta
         </h2>
 
-        <div className="space-y-3">
-          {SCHEDULE_STOPS.map((item, index) => (
-            <div key={item.stop} className="flex items-start gap-3 relative">
-              <div className="flex flex-col items-center shrink-0 pt-0.5">
-                <div className="w-8 h-8 rounded-full bg-[#D62828] text-white font-extrabold text-[11px] flex items-center justify-center border-2 border-[#FCBF49]">
-                  {item.stop}
+        {publishedRundown.length > 0 ? (
+          <div className="space-y-3">
+            {publishedRundown.map((item, index) => (
+              <div key={item.id} className="flex items-start gap-3 relative">
+                <div className="flex flex-col items-center shrink-0 pt-0.5">
+                  <div className="w-8 h-8 rounded-full bg-[#D62828] text-white font-extrabold text-[11px] flex items-center justify-center border-2 border-[#FCBF49]">
+                    {String(index + 1).padStart(2, '0')}
+                  </div>
+                  {index < publishedRundown.length - 1 && (
+                    <div className="w-0.5 h-7 border-r-2 border-dashed border-[#E5BDB9] mt-1" />
+                  )}
                 </div>
-                {index < SCHEDULE_STOPS.length - 1 && (
-                  <div className="w-0.5 h-7 border-r-2 border-dashed border-[#E5BDB9] mt-1" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0 pb-2 border-b border-[#E5BDB9]/40 last:border-b-0">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-bold text-[#005F76] tabular-nums">
-                  <span>{item.time} WIB</span>
-                  <span aria-hidden="true">·</span>
-                  <span className="text-[#7D5800]">{item.duration}</span>
+                <div className="flex-1 min-w-0 pb-2 border-b border-[#E5BDB9]/40 last:border-b-0">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-bold text-[#005F76] tabular-nums">
+                    <span>
+                      {item.start_time}
+                      {item.end_time ? `–${item.end_time}` : ''} WIB
+                    </span>
+                    {item.duration && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span className="text-[#7D5800]">{item.duration}</span>
+                      </>
+                    )}
+                  </div>
+                  <h3 className="text-sm font-extrabold text-[#2B2D42] leading-snug mt-0.5">
+                    {item.activity_name}
+                  </h3>
+                  {item.description && (
+                    <p className="text-xs text-[#5C403D] mt-0.5">{item.description}</p>
+                  )}
                 </div>
-                <h3 className="text-sm font-extrabold text-[#2B2D42] leading-snug mt-0.5">
-                  {item.title}
-                </h3>
-                <p className="text-xs text-[#5C403D] mt-0.5">{item.note}</p>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-2xl bg-[#FFF9F2] border border-[#FCBF49]/40 p-4 text-xs text-[#5C403D]">
+            Susunan acara sedang disiapkan dan akan ditampilkan setelah dipublikasikan.
+          </p>
+        )}
       </div>
 
       {/* Venue & Google Maps Embed Card */}
@@ -244,6 +182,21 @@ export const VenueAndRundown: React.FC<VenueAndRundownProps> = ({ onShowToast })
         <h3 className="text-lg font-extrabold text-[#2B2D42] mb-3">
           {effectiveVenue}
         </h3>
+
+        {invitationInfo.venue_photo_url && (
+          <div className="mb-3">
+            <img
+              src={invitationInfo.venue_photo_url}
+              alt={`Foto lokasi ${effectiveVenue}`}
+              className="w-full aspect-[16/10] object-cover rounded-2xl border-2 border-[#FCBF49]/45"
+            />
+            {invitationInfo.venue_description && (
+              <p className="text-xs text-[#5C403D] mt-2 leading-relaxed">
+                {invitationInfo.venue_description}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Google Maps Embed Frame */}
         <div className="w-full h-[220px] rounded-2xl overflow-hidden border-2 border-[#FCBF49]/45 bg-[#F4F2FF] relative">

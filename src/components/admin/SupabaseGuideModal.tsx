@@ -11,115 +11,13 @@ import {
   Info,
 } from 'lucide-react';
 import { isSupabaseConfigured } from '../../utils/supabase';
+import SQL_SCHEMA_SNIPPET from '../../../supabase-security-update.sql?raw';
 
 interface SupabaseGuideModalProps {
   isOpen: boolean;
   onClose: () => void;
   onShowToast: (message: string) => void;
 }
-
-const SQL_SCHEMA_SNIPPET = `-- SKEMA DATABASE, IZIN (GRANT), & STORAGE SUPABASE
--- Jalankan di: Supabase Dashboard -> SQL Editor -> New Query -> Paste & Run
-
--- 1. TABEL: invitation_info
-CREATE TABLE IF NOT EXISTS public.invitation_info (
-  id text PRIMARY KEY DEFAULT 'default',
-  child_name text NOT NULL DEFAULT 'Faqih Al-Arif Billah',
-  parents_name text NOT NULL DEFAULT 'Bpk. Dede Nurjaya & Ibu Ruslinawati',
-  event_day_date text NOT NULL DEFAULT 'Sabtu, 19 Desember 2026',
-  event_time text NOT NULL DEFAULT '18.00 – 00.00 WIB',
-  event_venue text NOT NULL DEFAULT 'Lumé Coffee',
-  event_address text NOT NULL DEFAULT 'Lumé Coffee, Jl. KH Abdullah Syafei No.7, RT.6/RW.2, Manggarai Sel., Kec. Tebet, Kota Jakarta Selatan, DKI Jakarta 12860',
-  invitation_message text NOT NULL DEFAULT 'Dengan memohon rahmat dan ridho Allah SWT, kami mengundang Bapak/Ibu/Saudara/i untuk turut hadir memberikan doa restu pada acara Walimatul Khitan putra kami, langkah awal sang pemberani menuju pribadi yang sholeh, sehat, dan penuh semangat.',
-  hero_photo_url text,
-  maps_url text DEFAULT 'https://www.google.com/maps/search/?api=1&query=Lume+Coffee+Jl+KH+Abdullah+Syafei+No+7+Tebet+Jakarta+Selatan+12860',
-  maps_embed_url text DEFAULT 'https://maps.google.com/maps?q=Lume%20Coffee%20Jl.%20KH%20Abdullah%20Syafei%20No.7%20Tebet%20Jakarta%20Selatan&t=&z=16&ie=UTF8&iwloc=&output=embed',
-  updated_at timestamptz DEFAULT now()
-);
-
--- 2. TABEL: gallery_photos
-CREATE TABLE IF NOT EXISTS public.gallery_photos (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  carriage_no text,
-  tag_label text,
-  title text NOT NULL,
-  caption text,
-  image_url text NOT NULL,
-  storage_path text,
-  order_index integer DEFAULT 0,
-  created_at timestamptz DEFAULT now()
-);
-
--- 3. TABEL: music_settings
-CREATE TABLE IF NOT EXISTS public.music_settings (
-  id text PRIMARY KEY DEFAULT 'default',
-  title text NOT NULL DEFAULT 'Thomas & Friends Theme Song',
-  audio_url text NOT NULL DEFAULT '/lagu-undangan.mp3',
-  storage_path text,
-  is_active boolean DEFAULT true,
-  updated_at timestamptz DEFAULT now()
-);
-
--- 4. TABEL: admin_users (Tabel Akun Admin - id diisi UID dari auth.users)
-CREATE TABLE IF NOT EXISTS public.admin_users (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  email text,
-  role text DEFAULT 'admin',
-  created_at timestamptz DEFAULT now()
-);
-
--- 5. HAK AKSES SCHEMA & TABEL (GRANT)
-GRANT USAGE ON SCHEMA public TO anon, authenticated;
-GRANT SELECT ON public.invitation_info TO anon, authenticated;
-GRANT SELECT ON public.gallery_photos TO anon, authenticated;
-GRANT SELECT ON public.music_settings TO anon, authenticated;
-GRANT ALL ON public.invitation_info TO authenticated;
-GRANT ALL ON public.gallery_photos TO authenticated;
-GRANT ALL ON public.music_settings TO authenticated;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.admin_users TO authenticated;
-GRANT SELECT ON public.admin_users TO anon;
-
--- 6. ENABLE ROW LEVEL SECURITY (RLS)
-ALTER TABLE public.invitation_info ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.gallery_photos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.music_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
-
--- 7. POLICIES: Public Read, Authenticated Admin Manage
-DROP POLICY IF EXISTS "Public Read invitation_info" ON public.invitation_info;
-CREATE POLICY "Public Read invitation_info" ON public.invitation_info FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Admin Manage invitation_info" ON public.invitation_info;
-CREATE POLICY "Admin Manage invitation_info" ON public.invitation_info FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Public Read gallery_photos" ON public.gallery_photos;
-CREATE POLICY "Public Read gallery_photos" ON public.gallery_photos FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Admin Manage gallery_photos" ON public.gallery_photos;
-CREATE POLICY "Admin Manage gallery_photos" ON public.gallery_photos FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Public Read music_settings" ON public.music_settings;
-CREATE POLICY "Public Read music_settings" ON public.music_settings FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Admin Manage music_settings" ON public.music_settings;
-CREATE POLICY "Admin Manage music_settings" ON public.music_settings FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow authenticated read admin_users" ON public.admin_users;
-CREATE POLICY "Allow authenticated read admin_users" ON public.admin_users FOR SELECT TO authenticated USING (true);
-DROP POLICY IF EXISTS "Allow authenticated manage admin_users" ON public.admin_users;
-CREATE POLICY "Allow authenticated manage admin_users" ON public.admin_users FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
--- 8. STORAGE BUCKET: invitation-assets
-INSERT INTO storage.buckets (id, name, public) VALUES ('invitation-assets', 'invitation-assets', true)
-ON CONFLICT (id) DO UPDATE SET public = true;
-
-DROP POLICY IF EXISTS "Public Read Assets" ON storage.objects;
-CREATE POLICY "Public Read Assets" ON storage.objects FOR SELECT USING (bucket_id = 'invitation-assets');
-DROP POLICY IF EXISTS "Admin Upload Assets" ON storage.objects;
-CREATE POLICY "Admin Upload Assets" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'invitation-assets');
-DROP POLICY IF EXISTS "Admin Update Assets" ON storage.objects;
-CREATE POLICY "Admin Update Assets" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'invitation-assets');
-DROP POLICY IF EXISTS "Admin Delete Assets" ON storage.objects;
-CREATE POLICY "Admin Delete Assets" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'invitation-assets');`;
 
 export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({
   isOpen,

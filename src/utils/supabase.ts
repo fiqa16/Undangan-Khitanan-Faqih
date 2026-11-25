@@ -37,6 +37,7 @@ export interface InvitationInfo {
   event_address: string;
   invitation_message: string;
   hero_photo_url?: string | null;
+  hero_photo_path?: string | null;
   venue_photo_url?: string | null;
   venue_photo_path?: string | null;
   venue_description?: string | null;
@@ -93,7 +94,10 @@ export async function uploadFileToStorage(
   const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const fileExt = cleanFileName.split('.').pop() || (folder === 'music' ? 'mp3' : 'jpg');
   // Unique file naming to prevent browser caching or file name collisions
-  const uniqueToken = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const uniqueToken =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}_${Math.random().toString(36).substring(2, 12)}`;
   const filePath = `${folder}/${uniqueToken}.${fileExt}`;
 
   const { error: uploadError } = await supabase.storage
@@ -106,7 +110,7 @@ export async function uploadFileToStorage(
   if (uploadError) {
     if (uploadError.message?.toLowerCase().includes('bucket not found') || uploadError.message?.includes('404')) {
       throw new Error(
-        `Bucket '${BUCKET_NAME}' belum dibuat di Supabase Storage. Harap jalankan script 'supabase-update-v2.sql' di Supabase SQL Editor.`
+        `Bucket '${BUCKET_NAME}' belum tersedia di Supabase Storage. Jalankan 'supabase-security-update.sql' di Supabase SQL Editor.`
       );
     }
     throw new Error(`Gagal mengunggah file ke Supabase Storage: ${uploadError.message}`);
@@ -127,18 +131,16 @@ export async function uploadFileToStorage(
 /**
  * Delete file from Supabase Storage
  */
-export async function deleteFileFromStorage(filePath: string): Promise<boolean> {
-  if (!isSupabaseConfigured || !filePath) return false;
+export async function deleteFileFromStorage(filePath: string): Promise<void> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase belum dikonfigurasi; file tidak dapat dihapus.');
+  }
+  if (!filePath) {
+    throw new Error('Path file tidak tersedia; file tidak dapat dihapus.');
+  }
 
-  try {
-    const { error } = await supabase.storage.from(BUCKET_NAME).remove([filePath]);
-    if (error) {
-      console.warn('Gagal menghapus file dari storage:', error.message);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.warn('Error saat menghapus file storage:', err);
-    return false;
+  const { error } = await supabase.storage.from(BUCKET_NAME).remove([filePath]);
+  if (error) {
+    throw new Error(`Gagal menghapus file dari Supabase Storage: ${error.message}`);
   }
 }

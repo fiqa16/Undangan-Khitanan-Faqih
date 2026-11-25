@@ -31,119 +31,6 @@ export const DEFAULT_INVITATION_INFO: InvitationInfo = {
     'https://maps.google.com/maps?q=Lume%20Coffee%20Jl.%20KH%20Abdullah%20Syafei%20No.7%20Tebet%20Jakarta%20Selatan&t=&z=16&ie=UTF8&iwloc=&output=embed',
 };
 
-export const DEFAULT_RUNDOWN_ITEMS: RundownItem[] = [
-  {
-    id: 'draft-1',
-    activity_name: 'Kedatangan tamu undangan',
-    start_time: '18.00',
-    end_time: '19.00',
-    duration: '1 jam',
-    description: 'Keluarga Besar & Tamu Undangan',
-    order_index: 1,
-    is_published: false,
-  },
-  {
-    id: 'draft-2',
-    activity_name: 'Pembukaan oleh MC',
-    start_time: '19.00',
-    end_time: '19.05',
-    duration: '5 menit',
-    description: 'MC',
-    order_index: 2,
-    is_published: false,
-  },
-  {
-    id: 'draft-3',
-    activity_name: "Pembacaan ayat suci Al-Qur'an",
-    start_time: '19.05',
-    end_time: '19.20',
-    duration: '15 menit',
-    description: 'Ua Hafsah',
-    order_index: 3,
-    is_published: false,
-  },
-  {
-    id: 'draft-4',
-    activity_name: 'Sambutan dari orang tua',
-    start_time: '19.20',
-    end_time: '19.40',
-    duration: '20 menit',
-    description: 'Orang Tua',
-    order_index: 4,
-    is_published: false,
-  },
-  {
-    id: 'draft-5',
-    activity_name: 'Tausiyah singkat',
-    start_time: '19.40',
-    end_time: '20.00',
-    duration: '20 menit',
-    description: 'Pak Ustad Ridwan',
-    order_index: 5,
-    is_published: false,
-  },
-  {
-    id: 'draft-6',
-    activity_name: 'Doa bersama',
-    start_time: '20.00',
-    end_time: '20.15',
-    duration: '15 menit',
-    description: 'Pak Ustad Ridwan / Kakek',
-    order_index: 6,
-    is_published: false,
-  },
-  {
-    id: 'draft-7',
-    activity_name: 'Penyampaian ucapan dan nasihat untuk anak yang dikhitan',
-    start_time: '20.15',
-    end_time: '20.45',
-    duration: '30 menit',
-    description: 'Nenek/Kakek, Om/Tante, dan keluarga lainnya',
-    order_index: 7,
-    is_published: false,
-  },
-  {
-    id: 'draft-8',
-    activity_name: 'Foto bersama keluarga',
-    start_time: '20.45',
-    end_time: '20.55',
-    duration: '10 menit',
-    description: 'Keluarga Besar',
-    order_index: 8,
-    is_published: false,
-  },
-  {
-    id: 'draft-9',
-    activity_name: 'Makan bersama',
-    start_time: '20.55',
-    end_time: '21.55',
-    duration: '60 menit',
-    description: 'Keluarga Besar',
-    order_index: 9,
-    is_published: false,
-  },
-  {
-    id: 'draft-10',
-    activity_name: 'Karaoke dan Fun Time',
-    start_time: '21.55',
-    end_time: '23.55',
-    duration: '60 menit',
-    description: 'Keluarga Besar',
-    order_index: 10,
-    is_published: false,
-  },
-  {
-    id: 'draft-11',
-    activity_name: 'Penutupan',
-    start_time: '23.55',
-    end_time: '00.00',
-    duration: '5 menit',
-    description: 'Orang Tua',
-    order_index: 11,
-    is_published: false,
-  },
-];
-
 export const DEFAULT_GALLERY_PHOTOS: GalleryPhoto[] = [
   {
     id: 'default-1',
@@ -221,6 +108,7 @@ interface InvitationContextType {
   rundownItems: RundownItem[];
   isLoading: boolean;
   isRundownLoading: boolean;
+  dataError: string | null;
   isSupabaseConfigured: boolean;
   refreshData: () => Promise<void>;
   updateInvitationInfo: (data: Partial<InvitationInfo>) => Promise<void>;
@@ -246,12 +134,14 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [invitationInfo, setInvitationInfo] = useState<InvitationInfo>(DEFAULT_INVITATION_INFO);
   const [galleryPhotos, setGalleryPhotos] = useState<GalleryPhoto[]>(DEFAULT_GALLERY_PHOTOS);
   const [musicSettings, setMusicSettings] = useState<MusicSetting>(DEFAULT_MUSIC_SETTING);
-  const [rundownItems, setRundownItems] = useState<RundownItem[]>(DEFAULT_RUNDOWN_ITEMS);
+  const [rundownItems, setRundownItems] = useState<RundownItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRundownLoading, setIsRundownLoading] = useState<boolean>(false);
+  const [dataError, setDataError] = useState<string | null>(null);
 
   const fetchAllData = useCallback(async () => {
     setIsLoading(true);
+    setDataError(null);
 
     if (!isSupabaseConfigured) {
       setIsLoading(false);
@@ -266,7 +156,8 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         .eq('id', 'default')
         .maybeSingle();
 
-      if (!infoErr && infoData) {
+      if (infoErr) throw new Error(`Gagal memuat informasi undangan: ${infoErr.message}`);
+      if (infoData) {
         setInvitationInfo((prev) => ({ ...prev, ...infoData }));
       }
 
@@ -277,12 +168,8 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         .order('order_index', { ascending: true })
         .order('created_at', { ascending: true });
 
-      if (!photosErr && photosData && photosData.length > 0) {
-        setGalleryPhotos(photosData);
-      } else {
-        // Fallback to defaults if table is empty
-        setGalleryPhotos(DEFAULT_GALLERY_PHOTOS);
-      }
+      if (photosErr) throw new Error(`Gagal memuat foto galeri: ${photosErr.message}`);
+      setGalleryPhotos(photosData && photosData.length > 0 ? photosData : DEFAULT_GALLERY_PHOTOS);
 
       // 3. Fetch music settings
       const { data: musicData, error: musicErr } = await supabase
@@ -291,7 +178,8 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         .eq('id', 'default')
         .maybeSingle();
 
-      if (!musicErr && musicData) {
+      if (musicErr) throw new Error(`Gagal memuat pengaturan musik: ${musicErr.message}`);
+      if (musicData) {
         setMusicSettings((prev) => ({ ...prev, ...musicData }));
         if (musicData.audio_url) {
           setBackgroundMusicUrl(musicData.audio_url);
@@ -304,22 +192,29 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         .select('*')
         .order('order_index', { ascending: true });
 
-      if (!rundownErr && rundownData && rundownData.length > 0) {
-        setRundownItems(rundownData);
-      }
+      if (rundownErr) throw new Error(`Gagal memuat rundown: ${rundownErr.message}`);
+      setRundownItems(rundownData || []);
     } catch (err) {
-      console.warn('Gagal memuat data dari Supabase, menggunakan data bawaan:', err);
+      const message = err instanceof Error ? err.message : 'Gagal memuat data dari Supabase.';
+      setDataError(message);
+      throw new Error(message);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void fetchAllData();
+    void fetchAllData().catch((error: unknown) => {
+      console.error('Gagal memuat data dari Supabase:', error);
+    });
   }, [fetchAllData]);
 
   // Update invitation info in Supabase
   const updateInvitationInfo = async (data: Partial<InvitationInfo>) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase belum dikonfigurasi; informasi undangan tidak dapat disimpan.');
+    }
+
     const updated = {
       ...invitationInfo,
       ...data,
@@ -327,14 +222,11 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       updated_at: new Date().toISOString(),
     };
 
-    setInvitationInfo(updated);
-
-    if (isSupabaseConfigured) {
-      const { error } = await supabase.from('invitation_info').upsert(updated);
-      if (error) {
-        throw new Error(`Gagal menyimpan info undangan ke Supabase: ${error.message}`);
-      }
+    const { error } = await supabase.from('invitation_info').upsert(updated);
+    if (error) {
+      throw new Error(`Gagal menyimpan info undangan ke Supabase: ${error.message}`);
     }
+    setInvitationInfo(updated);
   };
 
   // Update venue photo / location in Supabase
@@ -343,6 +235,10 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     venue_photo_path?: string | null;
     venue_description?: string | null;
   }) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase belum dikonfigurasi; foto lokasi tidak dapat disimpan.');
+    }
+
     const updated = {
       ...invitationInfo,
       ...data,
@@ -350,34 +246,23 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       updated_at: new Date().toISOString(),
     };
 
-    setInvitationInfo(updated);
-
-    if (isSupabaseConfigured) {
-      const { error } = await supabase.from('invitation_info').upsert(updated);
-      if (error) {
-        throw new Error(`Gagal menyimpan foto lokasi ke Supabase: ${error.message}`);
-      }
+    const { error } = await supabase.from('invitation_info').upsert(updated);
+    if (error) {
+      throw new Error(`Gagal menyimpan foto lokasi ke Supabase: ${error.message}`);
     }
+    setInvitationInfo(updated);
   };
 
   // Add new gallery photo in Supabase
   const addGalleryPhoto = async (
     photo: Omit<GalleryPhoto, 'id' | 'created_at'>
   ): Promise<GalleryPhoto> => {
-    const newOrder = photo.order_index || galleryPhotos.length + 1;
-    const tempId = `photo-${Date.now()}`;
-
-    const newPhotoItem: GalleryPhoto = {
-      ...photo,
-      id: tempId,
-      order_index: newOrder,
-      created_at: new Date().toISOString(),
-    };
-
     if (!isSupabaseConfigured) {
-      setGalleryPhotos((prev) => [...prev, newPhotoItem]);
-      return newPhotoItem;
+      throw new Error('Supabase belum dikonfigurasi; foto galeri tidak dapat disimpan.');
     }
+    const newOrder =
+      photo.order_index ||
+      galleryPhotos.filter((item) => !item.id.startsWith('default-')).length + 1;
 
     const { data, error } = await supabase
       .from('gallery_photos')
@@ -398,12 +283,8 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
 
     setGalleryPhotos((prev) => {
-      // If previous gallery was default list without real URLs, replace or append
-      const isDefaultOnly = prev.length === DEFAULT_GALLERY_PHOTOS.length && prev.every((p) => !p.image_url);
-      if (isDefaultOnly) {
-        return [data];
-      }
-      return [...prev, data];
+      const persistedPhotos = prev.filter((item) => !item.id.startsWith('default-'));
+      return [...persistedPhotos, data];
     });
 
     return data;
@@ -411,8 +292,11 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Update existing gallery photo
   const updateGalleryPhoto = async (id: string, updates: Partial<GalleryPhoto>) => {
-    // If it's a default card that wasn't in Supabase yet, insert it as a real record!
-    if (id.startsWith('default-') && isSupabaseConfigured) {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase belum dikonfigurasi; foto galeri tidak dapat diperbarui.');
+    }
+
+    if (id.startsWith('default-')) {
       const existingDefault = galleryPhotos.find((p) => p.id === id);
       const merged = { ...existingDefault, ...updates };
 
@@ -434,48 +318,57 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         throw new Error(`Gagal menyimpan foto ke Supabase: ${error?.message || 'Error'}`);
       }
 
-      setGalleryPhotos((prev) => prev.map((photo) => (photo.id === id ? data : photo)));
+      setGalleryPhotos((prev) => [
+        ...prev.filter((photo) => !photo.id.startsWith('default-')),
+        data,
+      ]);
       return;
     }
 
-    setGalleryPhotos((prev) =>
-      prev.map((photo) => (photo.id === id ? { ...photo, ...updates } : photo))
-    );
+    const { data, error } = await supabase
+      .from('gallery_photos')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
 
-    if (isSupabaseConfigured) {
-      const { error } = await supabase
-        .from('gallery_photos')
-        .update(updates)
-        .eq('id', id);
-
-      if (error) {
-        throw new Error(`Gagal memperbarui foto di Supabase: ${error.message}`);
-      }
+    if (error || !data) {
+      throw new Error(`Gagal memperbarui foto di Supabase: ${error?.message || 'Foto tidak ditemukan.'}`);
     }
+    setGalleryPhotos((prev) => prev.map((photo) => (photo.id === id ? data : photo)));
   };
 
   // Delete gallery photo from table and storage
   const deleteGalleryPhoto = async (id: string, storagePath?: string | null) => {
-    // 1. Delete from storage if storage path exists
-    if (storagePath) {
-      await deleteFileFromStorage(storagePath);
+    if (!isSupabaseConfigured || id.startsWith('default-')) {
+      throw new Error('Foto galeri ini belum tersimpan di Supabase.');
     }
 
+    const { error } = await supabase.from('gallery_photos').delete().eq('id', id);
+    if (error) {
+      throw new Error(`Gagal menghapus foto dari Supabase: ${error.message}`);
+    }
     setGalleryPhotos((prev) => {
-      const filtered = prev.filter((p) => p.id !== id);
-      return filtered.length > 0 ? filtered : DEFAULT_GALLERY_PHOTOS;
+      const remaining = prev.filter((photo) => photo.id !== id);
+      return remaining.length > 0 ? remaining : DEFAULT_GALLERY_PHOTOS;
     });
 
-    if (isSupabaseConfigured && !id.startsWith('default-')) {
-      const { error } = await supabase.from('gallery_photos').delete().eq('id', id);
-      if (error) {
-        throw new Error(`Gagal menghapus foto dari Supabase: ${error.message}`);
+    if (storagePath) {
+      try {
+        await deleteFileFromStorage(storagePath);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'Kesalahan tidak diketahui.';
+        throw new Error(`Foto terhapus dari daftar, tetapi file Storage belum terhapus: ${detail}`);
       }
     }
   };
 
   // Update music settings
   const updateMusicSetting = async (updates: Partial<MusicSetting>) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase belum dikonfigurasi; pengaturan musik tidak dapat disimpan.');
+    }
+
     const updated = {
       ...musicSettings,
       ...updates,
@@ -483,17 +376,13 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       updated_at: new Date().toISOString(),
     };
 
+    const { error } = await supabase.from('music_settings').upsert(updated);
+    if (error) {
+      throw new Error(`Gagal menyimpan pengaturan musik ke Supabase: ${error.message}`);
+    }
     setMusicSettings(updated);
-
     if (updated.audio_url) {
       setBackgroundMusicUrl(updated.audio_url);
-    }
-
-    if (isSupabaseConfigured) {
-      const { error } = await supabase.from('music_settings').upsert(updated);
-      if (error) {
-        throw new Error(`Gagal menyimpan pengaturan musik ke Supabase: ${error.message}`);
-      }
     }
   };
 
@@ -501,23 +390,11 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const addRundownItem = async (
     item: Omit<RundownItem, 'id' | 'created_at' | 'updated_at'>
   ): Promise<RundownItem> => {
-    setIsRundownLoading(true);
-    const tempId = `rundown-${Date.now()}`;
-    const nextOrder = item.order_index || rundownItems.length + 1;
-
-    const newItem: RundownItem = {
-      ...item,
-      id: tempId,
-      order_index: nextOrder,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
     if (!isSupabaseConfigured) {
-      setRundownItems((prev) => [...prev, newItem]);
-      setIsRundownLoading(false);
-      return newItem;
+      throw new Error('Supabase belum dikonfigurasi; rundown tidak dapat disimpan.');
     }
+    setIsRundownLoading(true);
+    const nextOrder = item.order_index || rundownItems.length + 1;
 
     try {
       const { data, error } = await supabase
@@ -538,7 +415,9 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         throw new Error(error?.message || 'Gagal menambahkan kegiatan ke rundown.');
       }
 
-      setRundownItems((prev) => [...prev, data]);
+      setRundownItems((prev) =>
+        [...prev, data].sort((a, b) => a.order_index - b.order_index)
+      );
       return data;
     } finally {
       setIsRundownLoading(false);
@@ -546,113 +425,89 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updateRundownItem = async (id: string, updates: Partial<RundownItem>) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase belum dikonfigurasi; rundown tidak dapat diperbarui.');
+    }
     setIsRundownLoading(true);
-    setRundownItems((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, ...updates, updated_at: new Date().toISOString() } : item
-      )
-    );
+    try {
+      const { data, error } = await supabase
+        .from('event_rundown')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
 
-    if (isSupabaseConfigured && !id.startsWith('draft-')) {
-      try {
-        const { error } = await supabase
-          .from('event_rundown')
-          .update({
-            ...updates,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', id);
-
-        if (error) {
-          throw new Error(`Gagal memperbarui rundown di Supabase: ${error.message}`);
-        }
-      } finally {
-        setIsRundownLoading(false);
+      if (error || !data) {
+        throw new Error(`Gagal memperbarui rundown di Supabase: ${error?.message || 'Kegiatan tidak ditemukan.'}`);
       }
-    } else {
+      setRundownItems((prev) => prev.map((item) => (item.id === id ? data : item)));
+    } finally {
       setIsRundownLoading(false);
     }
   };
 
   const deleteRundownItem = async (id: string) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase belum dikonfigurasi; rundown tidak dapat dihapus.');
+    }
     setIsRundownLoading(true);
-    setRundownItems((prev) => prev.filter((item) => item.id !== id));
-
-    if (isSupabaseConfigured && !id.startsWith('draft-')) {
-      try {
-        const { error } = await supabase.from('event_rundown').delete().eq('id', id);
-        if (error) {
-          throw new Error(`Gagal menghapus kegiatan dari Supabase: ${error.message}`);
-        }
-      } finally {
-        setIsRundownLoading(false);
+    try {
+      const { error } = await supabase.from('event_rundown').delete().eq('id', id);
+      if (error) {
+        throw new Error(`Gagal menghapus kegiatan dari Supabase: ${error.message}`);
       }
-    } else {
+      setRundownItems((prev) => prev.filter((item) => item.id !== id));
+    } finally {
       setIsRundownLoading(false);
     }
   };
 
   const reorderRundownItems = async (reordered: RundownItem[]) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase belum dikonfigurasi; urutan rundown tidak dapat disimpan.');
+    }
+    setIsRundownLoading(true);
     const updated = reordered.map((item, idx) => ({ ...item, order_index: idx + 1 }));
-    setRundownItems(updated);
-
-    if (isSupabaseConfigured) {
-      try {
-        for (const item of updated) {
-          if (!item.id.startsWith('draft-')) {
-            await supabase
-              .from('event_rundown')
-              .update({ order_index: item.order_index })
-              .eq('id', item.id);
-          }
+    try {
+      for (const item of updated) {
+        const { error } = await supabase
+          .from('event_rundown')
+          .update({ order_index: item.order_index })
+          .eq('id', item.id);
+        if (error) {
+          throw new Error(`Gagal menyimpan urutan rundown: ${error.message}`);
         }
-      } catch (err) {
-        console.warn('Gagal memperbarui urutan rundown di Supabase:', err);
       }
+      setRundownItems(updated);
+    } catch (error) {
+      await fetchAllData();
+      throw error;
+    } finally {
+      setIsRundownLoading(false);
     }
   };
 
   const publishRundown = async (published: boolean) => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase belum dikonfigurasi; status rundown tidak dapat diubah.');
+    }
+    if (rundownItems.length === 0) {
+      throw new Error('Tambahkan kegiatan sebelum mempublikasikan rundown.');
+    }
     setIsRundownLoading(true);
-    const updated = rundownItems.map((item) => ({ ...item, is_published: published }));
-    setRundownItems(updated);
+    try {
+      const { data, error } = await supabase
+        .from('event_rundown')
+        .update({ is_published: published, updated_at: new Date().toISOString() })
+        .in('id', rundownItems.map((item) => item.id))
+        .select()
+        .order('order_index', { ascending: true });
 
-    if (isSupabaseConfigured) {
-      try {
-        // If items are draft only (not yet saved to table), insert them
-        for (const item of updated) {
-          if (item.id.startsWith('draft-')) {
-            await supabase.from('event_rundown').insert({
-              activity_name: item.activity_name,
-              start_time: item.start_time,
-              end_time: item.end_time || null,
-              duration: item.duration || null,
-              description: item.description || null,
-              order_index: item.order_index,
-              is_published: published,
-            });
-          } else {
-            await supabase
-              .from('event_rundown')
-              .update({ is_published: published, updated_at: new Date().toISOString() })
-              .eq('id', item.id);
-          }
-        }
-        // Refetch to sync real IDs from DB
-        const { data } = await supabase
-          .from('event_rundown')
-          .select('*')
-          .order('order_index', { ascending: true });
-        if (data && data.length > 0) {
-          setRundownItems(data);
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Gagal mengubah status publikasi rundown.';
-        throw new Error(msg);
-      } finally {
-        setIsRundownLoading(false);
+      if (error || !data) {
+        throw new Error(`Gagal mengubah status publikasi rundown: ${error?.message || 'Data tidak ditemukan.'}`);
       }
-    } else {
+      setRundownItems(data);
+    } finally {
       setIsRundownLoading(false);
     }
   };
@@ -666,6 +521,7 @@ export const InvitationProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         rundownItems,
         isLoading,
         isRundownLoading,
+        dataError,
         isSupabaseConfigured,
         refreshData: fetchAllData,
         updateInvitationInfo,

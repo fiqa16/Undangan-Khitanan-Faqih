@@ -15,7 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useInvitationData } from '../../context/InvitationContext';
-import { uploadFileToStorage } from '../../utils/supabase';
+import { deleteFileFromStorage, uploadFileToStorage } from '../../utils/supabase';
 
 interface InvitationInfoManagerProps {
   onShowToast: (message: string) => void;
@@ -52,33 +52,73 @@ export const InvitationInfoManager: React.FC<InvitationInfoManagerProps> = ({ on
       onShowToast('Harap pilih file gambar (JPG, PNG).');
       return;
     }
+    if (file.size > 5 * 1024 * 1024) {
+      onShowToast('Ukuran foto utama maksimal 5MB.');
+      return;
+    }
 
     setHeroPhotoFile(file);
     const localUrl = URL.createObjectURL(file);
     setHeroPhotoPreview(localUrl);
+    e.target.value = '';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
 
+    let uploadedPath: string | null = null;
+    let informationSaved = false;
     try {
       let finalHeroPhotoUrl = formData.hero_photo_url;
+      let finalHeroPhotoPath = formData.hero_photo_path;
 
-      // If user uploaded a new hero photo file
-      if (heroPhotoFile && isSupabaseConfigured) {
+      if (heroPhotoFile) {
+        if (!isSupabaseConfigured) {
+          throw new Error('Supabase belum dikonfigurasi; foto utama tidak dapat diunggah.');
+        }
         const uploadResult = await uploadFileToStorage(heroPhotoFile, 'gallery');
+        uploadedPath = uploadResult.path;
         finalHeroPhotoUrl = uploadResult.publicUrl;
+        finalHeroPhotoPath = uploadResult.path;
       }
 
       await updateInvitationInfo({
         ...formData,
         hero_photo_url: finalHeroPhotoUrl,
+        hero_photo_path: finalHeroPhotoPath,
       });
+      informationSaved = true;
 
+      const oldPhotoPath = invitationInfo.hero_photo_path;
+      if (oldPhotoPath && oldPhotoPath !== finalHeroPhotoPath) {
+        try {
+          await deleteFileFromStorage(oldPhotoPath);
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : 'Kesalahan tidak diketahui.';
+          throw new Error(`Perubahan foto tersimpan, tetapi foto lama belum terhapus: ${detail}`);
+        }
+      }
+
+      setFormData((current) => ({
+        ...current,
+        hero_photo_url: finalHeroPhotoUrl,
+        hero_photo_path: finalHeroPhotoPath,
+      }));
+      setHeroPhotoPreview(finalHeroPhotoUrl || null);
+      setHeroPhotoFile(null);
       onShowToast('Informasi undangan berhasil disimpan ke Supabase!');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gagal menyimpan informasi undangan.';
+      let msg = err instanceof Error ? err.message : 'Gagal menyimpan informasi undangan.';
+      if (uploadedPath && !informationSaved) {
+        try {
+          await deleteFileFromStorage(uploadedPath);
+        } catch (cleanupError) {
+          const detail =
+            cleanupError instanceof Error ? cleanupError.message : 'Kesalahan tidak diketahui.';
+          msg = `${msg} File yang gagal disimpan belum dapat dibersihkan: ${detail}`;
+        }
+      }
       onShowToast(msg);
     } finally {
       setIsSaving(false);
@@ -255,7 +295,11 @@ export const InvitationInfoManager: React.FC<InvitationInfoManagerProps> = ({ on
                     onClick={() => {
                       setHeroPhotoPreview(null);
                       setHeroPhotoFile(null);
-                      setFormData((prev) => ({ ...prev, hero_photo_url: null }));
+                      setFormData((prev) => ({
+                        ...prev,
+                        hero_photo_url: null,
+                        hero_photo_path: null,
+                      }));
                     }}
                     className="text-xs text-[#D62828] hover:underline"
                   >

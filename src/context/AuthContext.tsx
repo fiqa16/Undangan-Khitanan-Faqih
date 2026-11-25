@@ -5,9 +5,8 @@ import { supabase, isSupabaseConfigured } from '../utils/supabase';
 export interface AdminDebugInfo {
   uid: string;
   email?: string;
-  stage: 'auth' | 'session' | 'metadata' | 'uid_lookup' | 'user_id_lookup' | 'email_lookup' | 'table_error' | 'not_found' | 'role_mismatch';
+  stage: 'auth' | 'session' | 'uid_lookup' | 'table_error' | 'not_found';
   details?: string;
-  roleFound?: string;
   dbErrorCode?: string;
 }
 
@@ -36,14 +35,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [lastVerifyResult, setLastVerifyResult] = useState<AdminVerifyResult | null>(null);
 
-  /**
-   * Thorough verification of admin status checking:
-   * 1. app_metadata and user_metadata role === 'admin'
-   * 2. admin_users table match by UID (id = currentUser.id)
-   * 3. admin_users table match by user_id (user_id = currentUser.id)
-   * 4. admin_users table match by email (email = currentUser.email)
-   * With explicit database error diagnostics (e.g. 42501 permission denied, RLS issues)
-   */
   const verifyAdminStatus = async (currentUser: User | null): Promise<AdminVerifyResult> => {
     if (!currentUser) {
       return {
@@ -56,177 +47,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const uid = currentUser.id;
     const email = currentUser.email || '';
 
-    // 1. Check metadata (app_metadata or user_metadata)
-    const appRole = (currentUser.app_metadata?.role || '').toString().toLowerCase().trim();
-    const userRole = (currentUser.user_metadata?.role || '').toString().toLowerCase().trim();
-
-    if (appRole === 'admin' || userRole === 'admin') {
-      return {
-        authorized: true,
-        debugInfo: {
-          uid,
-          email,
-          stage: 'metadata',
-          roleFound: appRole || userRole,
-          details: 'Role admin terverifikasi dari metadata akun.',
-        },
-      };
-    }
-
     if (!isSupabaseConfigured) {
       return {
-        authorized: true,
+        authorized: false,
+        error: 'Supabase belum dikonfigurasi. Admin harus diverifikasi melalui tabel admin_users.',
         debugInfo: {
           uid,
           email,
-          stage: 'metadata',
-          details: 'Mode pratinjau lokal (Supabase belum terkonfigurasi).',
+          stage: 'table_error',
+          details: 'Supabase is not configured.',
         },
       };
     }
 
-    // 2. Primary Check: Query public.admin_users by UID (id = currentUser.id)
     try {
-      const { data: uidData, error: uidError } = await supabase
+      const { data, error } = await supabase
         .from('admin_users')
-        .select('*')
+        .select('id, role')
         .eq('id', uid)
+        .eq('role', 'admin')
         .maybeSingle();
 
-      if (uidError) {
-        console.warn('Query admin_users by id error:', uidError);
-        // Catch PostgreSQL 42501 (permission denied / RLS blocking)
-        if (uidError.code === '42501') {
-          return {
-            authorized: false,
-            error: `Autentikasi akun berhasil (UID: ${uid}), namun database menolak akses ke tabel "public.admin_users" (PostgreSQL Error 42501: permission denied). Peran "authenticated" memerlukan hak akses SELECT pada tabel admin_users.`,
-            debugInfo: {
-              uid,
-              email,
-              stage: 'table_error',
-              dbErrorCode: '42501',
-              details: uidError.message,
-            },
-          };
-        }
+      if (error) {
+        return {
+          authorized: false,
+          error: `Gagal memverifikasi admin di tabel admin_users: ${error.message}`,
+          debugInfo: {
+            uid,
+            email,
+            stage: 'table_error',
+            dbErrorCode: error.code,
+            details: error.message,
+          },
+        };
       }
 
-      if (uidData) {
-        const role = (uidData.role || '').toString().toLowerCase().trim();
-        // Check if role is admin or if presence in admin_users implies admin
-        if (role === 'admin' || !uidData.role) {
-          return {
-            authorized: true,
-            debugInfo: {
-              uid,
-              email,
-              stage: 'uid_lookup',
-              roleFound: uidData.role || 'admin',
-              details: `UID ${uid} terverifikasi cocok di tabel admin_users dengan role "${uidData.role || 'admin'}".`,
-            },
-          };
-        } else {
-          return {
-            authorized: false,
-            error: `UID Anda (${uid}) terdaftar di tabel admin_users, namun memiliki role "${uidData.role}" (dibutuhkan role "admin").`,
-            debugInfo: {
-              uid,
-              email,
-              stage: 'role_mismatch',
-              roleFound: uidData.role,
-              details: `Role yang ditemukan adalah "${uidData.role}", bukan "admin".`,
-            },
-          };
-        }
+      if (data) {
+        return {
+          authorized: true,
+          debugInfo: {
+            uid,
+            email,
+            stage: 'uid_lookup',
+            details: 'UID akun cocok dengan baris admin ber-role admin.',
+          },
+        };
       }
 
-      // 3. Secondary Check: Column user_id = currentUser.id (in case column is named user_id)
-      try {
-        const { data: userIdData, error: userIdError } = await supabase
-          .from('admin_users')
-          .select('*')
-          .eq('user_id', uid)
-          .maybeSingle();
-
-        if (!userIdError && userIdData) {
-          const role = (userIdData.role || '').toString().toLowerCase().trim();
-          if (role === 'admin' || !userIdData.role) {
-            return {
-              authorized: true,
-              debugInfo: {
-                uid,
-                email,
-                stage: 'user_id_lookup',
-                roleFound: userIdData.role || 'admin',
-                details: `UID ${uid} terverifikasi melalui kolom user_id.`,
-              },
-            };
-          } else {
-            return {
-              authorized: false,
-              error: `UID ${uid} ditemukan di kolom user_id, namun memiliki role "${userIdData.role}".`,
-              debugInfo: {
-                uid,
-                email,
-                stage: 'role_mismatch',
-                roleFound: userIdData.role,
-              },
-            };
-          }
-        }
-      } catch {
-        // Ignore if user_id column doesn't exist
-      }
-
-      // 4. Tertiary Check: Match by email (case-insensitive)
-      if (email) {
-        try {
-          const { data: emailData, error: emailError } = await supabase
-            .from('admin_users')
-            .select('*')
-            .ilike('email', email.trim())
-            .maybeSingle();
-
-          if (!emailError && emailData) {
-            const role = (emailData.role || '').toString().toLowerCase().trim();
-            if (role === 'admin' || !emailData.role) {
-              return {
-                authorized: true,
-                debugInfo: {
-                  uid,
-                  email,
-                  stage: 'email_lookup',
-                  roleFound: emailData.role || 'admin',
-                  details: `Email ${email} terverifikasi cocok di tabel admin_users.`,
-                },
-              };
-            } else {
-              return {
-                authorized: false,
-                error: `Email ${email} ditemukan di tabel admin_users, namun role adalah "${emailData.role}".`,
-                debugInfo: {
-                  uid,
-                  email,
-                  stage: 'role_mismatch',
-                  roleFound: emailData.role,
-                },
-              };
-            }
-          }
-        } catch {
-          // Ignore if email column doesn't exist
-        }
-      }
-
-      // If not found in admin_users
       return {
         authorized: false,
-        error: `Akses ditolak: Akun ${email} (UID: ${uid}) tidak ditemukan di tabel public.admin_users. Pastikan kolom id pada tabel admin_users berisi UID: ${uid} dan kolom role berisi "admin".`,
+        error: 'Akses ditolak: UID akun ini tidak terdaftar sebagai admin.',
         debugInfo: {
           uid,
           email,
           stage: 'not_found',
-          details: `UID ${uid} tidak ditemukan pada kolom id maupun user_id di tabel admin_users.`,
+          details: 'No matching admin_users row for this auth UID.',
         },
       };
     } catch (err: unknown) {

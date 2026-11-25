@@ -12,7 +12,11 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useInvitationData } from '../../context/InvitationContext';
-import { GalleryPhoto, uploadFileToStorage } from '../../utils/supabase';
+import {
+  deleteFileFromStorage,
+  GalleryPhoto,
+  uploadFileToStorage,
+} from '../../utils/supabase';
 
 interface GalleryManagerProps {
   onShowToast: (message: string) => void;
@@ -25,7 +29,9 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
     updateGalleryPhoto,
     deleteGalleryPhoto,
     isSupabaseConfigured,
+    refreshData,
   } = useInvitationData();
+  const savedPhotos = galleryPhotos.filter((photo) => !photo.id.startsWith('default-'));
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -40,17 +46,19 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Open Add Modal
   const handleOpenAdd = () => {
-    const nextIndex = galleryPhotos.length + 1;
+    const nextIndex = savedPhotos.length + 1;
     setFormTitle(`Momen Faqih 0${nextIndex}`);
     setFormCaption('Cerita momen bahagia ananda Faqih bersama keluarga dan sahabat tercinta.');
     setFormCarriageNo(`Gerbong 0${nextIndex}`);
     setFormTagLabel('Kenangan');
     setPreviewUrl(null);
     setSelectedFile(null);
+    setUploadError(null);
     setIsAddModalOpen(true);
   };
 
@@ -74,8 +82,13 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
       onShowToast('Harap pilih file gambar (JPG, PNG, WebP).');
       return;
     }
+    if (file.size > 5 * 1024 * 1024) {
+      onShowToast('Ukuran file foto maksimal 5MB.');
+      return;
+    }
 
     setSelectedFile(file);
+    setUploadError(null);
     const localUrl = URL.createObjectURL(file);
     setPreviewUrl(localUrl);
   };
@@ -88,37 +101,48 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
       return;
     }
 
-    if (!selectedFile && !previewUrl) {
+    if (!selectedFile) {
       onShowToast('Harap pilih foto yang ingin diunggah dari perangkat.');
+      return;
+    }
+    if (!isSupabaseConfigured) {
+      onShowToast('Supabase belum dikonfigurasi; foto tidak dapat diunggah.');
       return;
     }
 
     setIsProcessing(true);
+    setUploadError(null);
+    let uploadedPath: string | null = null;
     try {
-      let finalImageUrl = previewUrl || '';
-      let storagePath: string | null = null;
-
-      // Upload to Supabase Storage if configured and file is selected
-      if (selectedFile && isSupabaseConfigured) {
-        const uploadResult = await uploadFileToStorage(selectedFile, 'gallery');
-        finalImageUrl = uploadResult.publicUrl;
-        storagePath = uploadResult.path;
-      }
+      const uploadResult = await uploadFileToStorage(selectedFile, 'gallery');
+      uploadedPath = uploadResult.path;
 
       await addGalleryPhoto({
         title: formTitle.trim(),
         caption: formCaption.trim(),
-        carriage_no: formCarriageNo.trim() || `Gerbong 0${galleryPhotos.length + 1}`,
+        carriage_no: formCarriageNo.trim() || `Gerbong 0${savedPhotos.length + 1}`,
         tag_label: formTagLabel.trim() || 'Kenangan',
-        image_url: finalImageUrl,
-        storage_path: storagePath,
-        order_index: galleryPhotos.length + 1,
+        image_url: uploadResult.publicUrl,
+        storage_path: uploadResult.path,
+        order_index: savedPhotos.length + 1,
       });
 
       onShowToast('Foto baru berhasil ditambahkan ke galeri!');
       setIsAddModalOpen(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal menyimpan foto.';
+      if (uploadedPath) {
+        try {
+          await deleteFileFromStorage(uploadedPath);
+        } catch (cleanupError) {
+          const cleanupMessage =
+            cleanupError instanceof Error ? cleanupError.message : 'Kesalahan tidak diketahui.';
+          setUploadError(`${msg} File yang gagal disimpan juga belum dapat dibersihkan: ${cleanupMessage}`);
+          onShowToast(`${msg} File sementara belum dapat dihapus dari Storage.`);
+          return;
+        }
+      }
+      setUploadError(msg);
       onShowToast(msg);
     } finally {
       setIsProcessing(false);
@@ -129,23 +153,22 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPhoto) return;
+    if (!isSupabaseConfigured) {
+      onShowToast('Supabase belum dikonfigurasi; foto tidak dapat diperbarui.');
+      return;
+    }
 
     setIsProcessing(true);
+    setUploadError(null);
+    let uploadedPath: string | null = null;
+    let updateSaved = false;
     try {
       let finalImageUrl = editingPhoto.image_url;
       let storagePath = editingPhoto.storage_path;
 
-      // If user selected a new file to replace existing photo
-      if (selectedFile && isSupabaseConfigured) {
+      if (selectedFile) {
         const uploadResult = await uploadFileToStorage(selectedFile, 'gallery');
-        // Clean up old storage file if replacing
-        if (editingPhoto.storage_path) {
-          try {
-            await deleteFileFromStorage(editingPhoto.storage_path);
-          } catch {
-            // Ignore failure to delete old file
-          }
-        }
+        uploadedPath = uploadResult.path;
         finalImageUrl = uploadResult.publicUrl;
         storagePath = uploadResult.path;
       }
@@ -158,11 +181,37 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
         image_url: finalImageUrl,
         storage_path: storagePath,
       });
+      updateSaved = true;
 
+      if (editingPhoto.storage_path && editingPhoto.storage_path !== storagePath) {
+        try {
+          await deleteFileFromStorage(editingPhoto.storage_path);
+        } catch (cleanupError) {
+          const detail =
+            cleanupError instanceof Error ? cleanupError.message : 'Kesalahan tidak diketahui.';
+          setEditingPhoto(null);
+          setUploadError(`Foto baru tersimpan, tetapi foto lama belum terhapus: ${detail}`);
+          onShowToast(`Foto baru tersimpan, tetapi file foto lama belum terhapus.`);
+          return;
+        }
+      }
       onShowToast('Perubahan foto berhasil disimpan!');
       setEditingPhoto(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal memperbarui foto.';
+      if (uploadedPath && !updateSaved) {
+        try {
+          await deleteFileFromStorage(uploadedPath);
+        } catch (cleanupError) {
+          const detail =
+            cleanupError instanceof Error ? cleanupError.message : 'Kesalahan tidak diketahui.';
+          const combinedMessage = `${msg} File yang gagal disimpan belum dapat dibersihkan: ${detail}`;
+          setUploadError(combinedMessage);
+          onShowToast(combinedMessage);
+          return;
+        }
+      }
+      setUploadError(msg);
       onShowToast(msg);
     } finally {
       setIsProcessing(false);
@@ -172,14 +221,27 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
   // Confirm Delete
   const handleConfirmDelete = async () => {
     if (!photoToDelete) return;
+    if (!isSupabaseConfigured) {
+      onShowToast('Supabase belum dikonfigurasi; foto tidak dapat dihapus.');
+      return;
+    }
 
     setIsProcessing(true);
+    setUploadError(null);
     try {
       await deleteGalleryPhoto(photoToDelete.id, photoToDelete.storage_path);
       onShowToast(`Foto "${photoToDelete.title}" berhasil dihapus.`);
       setPhotoToDelete(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal menghapus foto.';
+      setUploadError(msg);
+      try {
+        await refreshData();
+      } catch (refreshError) {
+        const detail =
+          refreshError instanceof Error ? refreshError.message : 'Data belum dapat dimuat ulang.';
+        setUploadError(`${msg} ${detail}`);
+      }
       onShowToast(msg);
     } finally {
       setIsProcessing(false);
@@ -213,8 +275,20 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
       </div>
 
       {/* Photos Grid */}
+      {uploadError && (
+        <div role="alert" className="p-3 rounded-xl bg-[#FFEAE8] border border-[#FFCCD0] text-xs text-[#A61E1E]">
+          {uploadError}
+        </div>
+      )}
+      {savedPhotos.length === 0 ? (
+        <div className="card-storybook rounded-3xl p-8 bg-white border border-[#FCBF49]/40 text-center">
+          <Camera className="w-8 h-8 text-[#D62828] mx-auto mb-2" />
+          <p className="text-sm font-bold text-[#2B2D42]">Belum ada foto yang tersimpan.</p>
+          <p className="text-xs text-[#5C403D] mt-1">Tambahkan foto untuk menampilkannya di galeri undangan.</p>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {galleryPhotos.map((photo, idx) => (
+        {savedPhotos.map((photo, idx) => (
           <div
             key={photo.id}
             className="card-storybook rounded-3xl p-4 bg-white border border-[#FCBF49]/40 flex flex-col justify-between group hover:border-[#FCBF49] transition-all"
@@ -278,6 +352,7 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
           </div>
         ))}
       </div>
+      )}
 
       {/* Modal: Tambah Foto Baru */}
       {isAddModalOpen && (
