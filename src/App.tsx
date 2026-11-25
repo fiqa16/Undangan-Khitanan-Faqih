@@ -1,5 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Lock, Share2, Train } from 'lucide-react';
+import { Loader2, Lock, Music, Pause, Share2, Train } from 'lucide-react';
 import { BoardingPassTicket } from './components/BoardingPassTicket';
 import { BottomStationNav } from './components/BottomStationNav';
 import { CarriageGallery } from './components/CarriageGallery';
@@ -9,7 +9,14 @@ import { StationCountdown } from './components/StationCountdown';
 import { TrackDivider } from './components/StorybookIllustrations';
 import { TicketBoothGift } from './components/TicketBoothGift';
 import { VenueAndRundown } from './components/VenueAndRundown';
-import { playTrainWhistle, toggleBackgroundMusic, setBackgroundMusicUrl } from './utils/sound';
+import { OpeningScreen } from './components/OpeningScreen';
+import {
+  playTrainWhistle,
+  toggleBackgroundMusic,
+  setBackgroundMusicUrl,
+  startBackgroundMusic,
+  subscribeMusicState,
+} from './utils/sound';
 import { AuthProvider } from './context/AuthContext';
 import { InvitationProvider, useInvitationData } from './context/InvitationContext';
 
@@ -25,6 +32,7 @@ function MainInvitationContent({
   showToast: (message: string) => void;
 }) {
   const { invitationInfo, musicSettings } = useInvitationData();
+  const [isInvitationOpened, setIsInvitationOpened] = useState(false);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
 
   // Sync music URL from Supabase settings
@@ -34,12 +42,33 @@ function MainInvitationContent({
     }
   }, [musicSettings.audio_url]);
 
+  // Subscribe to centralized music playing state
+  useEffect(() => {
+    const unsubscribe = subscribeMusicState((active) => {
+      setIsMusicPlaying(active);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   const guestName = useMemo(() => {
     if (typeof window === 'undefined') return 'Keluarga & Sahabat Tercinta';
     const params = new URLSearchParams(window.location.search);
     const to = params.get('to')?.trim();
     return to && to.length > 0 ? to : 'Keluarga & Sahabat Tercinta';
   }, []);
+
+  // Handle completion of opening screen
+  const handleOpenComplete = () => {
+    setIsInvitationOpened(true);
+
+    // Start Thomas background music smoothly (fades in)
+    if (musicSettings.is_active !== false) {
+      startBackgroundMusic(musicSettings.audio_url, 1400);
+      showToast(`Memutar: ${musicSettings.title || 'Thomas the Tank Engine'}`);
+    }
+  };
 
   const handlePlayWhistle = () => {
     playTrainWhistle();
@@ -84,6 +113,15 @@ function MainInvitationContent({
 
   return (
     <div className="min-h-screen bg-[#FFF9F2] relative overflow-x-hidden">
+      {/* 1. Opening Screen with Maroon Locomotive & Whistle Animation */}
+      {!isInvitationOpened && (
+        <OpeningScreen
+          childName={invitationInfo.child_name}
+          guestName={guestName !== 'Keluarga & Sahabat Tercinta' ? guestName : undefined}
+          onOpenComplete={handleOpenComplete}
+        />
+      )}
+
       {/* Ambient storybook cloud & star pattern visible on wider screens */}
       <div
         className="fixed inset-0 pointer-events-none opacity-65"
@@ -97,6 +135,29 @@ function MainInvitationContent({
           `,
         }}
       />
+
+      {/* Quick Floating Music Toggle Button (Easy to reach on both mobile and desktop) */}
+      <div className="fixed top-4 right-4 z-40">
+        <button
+          type="button"
+          onClick={handleToggleMusic}
+          aria-label={isMusicPlaying ? 'Matikan musik' : 'Putar musik'}
+          className={`min-h-[42px] px-3 rounded-full flex items-center gap-1.5 shadow-lg border backdrop-blur-md transition-all cursor-pointer ${
+            isMusicPlaying
+              ? 'bg-[#D62828] text-white border-[#FCBF49]'
+              : 'bg-white/90 text-[#5C403D] border-[#FCBF49]/60 hover:bg-[#FFF9F2]'
+          }`}
+        >
+          {isMusicPlaying ? (
+            <Pause className="w-4 h-4 text-white" />
+          ) : (
+            <Music className="w-4 h-4 text-[#D62828]" />
+          )}
+          <span className="text-[11px] font-extrabold pr-0.5">
+            {isMusicPlaying ? 'Musik Aktif' : 'Musik Mati'}
+          </span>
+        </button>
+      </div>
 
       {/* Centered Mobile-First Canvas (max 430px) */}
       <main className="relative z-10 max-w-[430px] mx-auto min-h-screen bg-[#FFF9F2] sm:shadow-[0_0_50px_rgba(43,45,66,0.08)] sm:border-x sm:border-[#FCBF49]/25 px-4 pb-24">
@@ -260,7 +321,6 @@ export default function App() {
       if (toastTimerRef.current !== null) {
         window.clearTimeout(toastTimerRef.current);
       }
-      toggleBackgroundMusic(false);
     };
   }, []);
 
