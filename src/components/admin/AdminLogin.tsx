@@ -1,11 +1,35 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Lock, Mail, Train, ArrowLeft, AlertCircle, Loader2 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import {
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  Train,
+  ArrowLeft,
+  AlertCircle,
+  Loader2,
+  Copy,
+  Check,
+  ShieldAlert,
+  Code,
+} from 'lucide-react';
+import { useAuth, AdminDebugInfo } from '../../context/AuthContext';
 import { isSupabaseConfigured } from '../../utils/supabase';
 
 interface AdminLoginProps {
   onBackToSite: () => void;
 }
+
+const SQL_FIX_COMMAND = `GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT SELECT ON public.invitation_info TO anon;
+GRANT SELECT ON public.gallery_photos TO anon;
+GRANT SELECT ON public.music_settings TO anon;
+GRANT SELECT ON public.admin_users TO authenticated;
+GRANT SELECT ON public.admin_users TO anon;
+
+DROP POLICY IF EXISTS "Allow authenticated read admin_users" ON public.admin_users;
+CREATE POLICY "Allow authenticated read admin_users" ON public.admin_users FOR SELECT TO authenticated USING (true);`;
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToSite }) => {
   const { signIn } = useAuth();
@@ -13,11 +37,15 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToSite }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<AdminDebugInfo | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [copiedUid, setCopiedUid] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setDebugInfo(null);
 
     if (!email.trim() || !password) {
       setErrorMessage('Harap masukkan email dan kata sandi.');
@@ -29,11 +57,30 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToSite }) => {
       const result = await signIn(email, password);
       if (!result.success) {
         setErrorMessage(result.error || 'Email atau password salah.');
+        if (result.debugInfo) {
+          setDebugInfo(result.debugInfo);
+        }
       }
     } catch {
-      setErrorMessage('Terjadi kendala saat proses login. Silakan coba lagi.');
+      setErrorMessage('Terjadi kendala saat proses login. Silakan periksa koneksi internet Anda.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleCopyUid = (uid: string) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(uid);
+      setCopiedUid(true);
+      setTimeout(() => setCopiedUid(false), 2000);
+    }
+  };
+
+  const handleCopySql = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(SQL_FIX_COMMAND);
+      setCopiedSql(true);
+      setTimeout(() => setCopiedSql(false), 2000);
     }
   };
 
@@ -55,13 +102,13 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToSite }) => {
       <button
         type="button"
         onClick={onBackToSite}
-        className="absolute top-6 left-6 z-20 inline-flex items-center gap-2 text-xs font-bold text-[#5C403D] hover:text-[#D62828] bg-white/80 backdrop-blur-xs px-3.5 py-2 rounded-full border border-[#FCBF49]/40 shadow-xs transition-colors"
+        className="absolute top-6 left-6 z-20 inline-flex items-center gap-2 text-xs font-bold text-[#5C403D] hover:text-[#D62828] bg-white/80 backdrop-blur-xs px-3.5 py-2 rounded-full border border-[#FCBF49]/40 shadow-xs transition-colors cursor-pointer"
       >
         <ArrowLeft className="w-4 h-4" />
         <span>Kembali ke Website Undangan</span>
       </button>
 
-      <div className="relative z-10 w-full max-w-[420px]">
+      <div className="relative z-10 w-full max-w-[460px]">
         {/* Header Badge */}
         <div className="text-center mb-6">
           <div className="w-16 h-16 rounded-3xl bg-[#D62828] text-white mx-auto flex items-center justify-center shadow-lg border-[3px] border-[#FCBF49] mb-3">
@@ -97,13 +144,79 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToSite }) => {
 
         {/* Card Form */}
         <div className="card-ticket rounded-3xl p-6 sm:p-8 bg-white border border-[#FCBF49]/50 shadow-xl">
+          {/* Main Error Alert */}
           {errorMessage && (
             <div
               role="alert"
-              className="mb-5 p-3.5 rounded-2xl bg-[#FFEAE8] border border-[#FFCCD0] text-[#D62828] text-xs font-medium flex items-start gap-2.5 animate-in fade-in duration-200"
+              className="mb-4 p-3.5 rounded-2xl bg-[#FFEAE8] border border-[#FFCCD0] text-[#D62828] text-xs font-medium flex items-start gap-2.5 animate-in fade-in duration-200"
             >
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{errorMessage}</span>
+              <div className="flex-1 leading-relaxed">
+                <span className="font-bold block mb-0.5">Kendala Masuk Admin:</span>
+                <span>{errorMessage}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Diagnostic Box: Appears when Supabase Auth succeeds but admin check fails */}
+          {debugInfo && (
+            <div className="mb-5 p-3.5 rounded-2xl bg-[#F8F9FA] border border-[#E9ECEF] text-xs space-y-2.5 animate-in fade-in duration-200">
+              <div className="flex items-center gap-1.5 text-[#2B2D42] font-bold">
+                <ShieldAlert className="w-4 h-4 text-[#D62828]" />
+                <span>Detail Pemeriksaan Supabase:</span>
+              </div>
+
+              {debugInfo.uid && (
+                <div className="bg-white p-2.5 rounded-xl border border-gray-200 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-gray-500 font-bold uppercase">UID Akun Anda:</p>
+                    <p className="font-mono text-[11px] text-[#2B2D42] truncate select-all">{debugInfo.uid}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyUid(debugInfo.uid)}
+                    className="px-2.5 py-1 rounded-lg bg-[#FFF9F2] hover:bg-[#FFDEA9]/50 border border-[#FCBF49]/60 text-[10px] font-bold text-[#2B2D42] shrink-0 inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedUid ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedUid ? 'Tersalin' : 'Salin UID'}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Specific guidance for PostgreSQL 42501 (Permission Denied) */}
+              {debugInfo.dbErrorCode === '42501' && (
+                <div className="bg-[#FFF3CD] p-3 rounded-xl border border-[#FFEEBA] text-[11px] text-[#856404] space-y-2">
+                  <p className="font-bold">Solusi Izin Database (Error 42501):</p>
+                  <p>
+                    Tabel <code>admin_users</code> belum memiliki izin SELECT untuk peran <code>authenticated</code>.
+                    Jalankan perintah SQL ini di Supabase SQL Editor:
+                  </p>
+                  <div className="relative bg-[#2B2D42] text-white p-2.5 rounded-lg font-mono text-[10px] overflow-x-auto">
+                    <button
+                      type="button"
+                      onClick={handleCopySql}
+                      className="absolute top-2 right-2 px-2 py-0.5 rounded bg-[#FCBF49] text-[#2B2D42] font-bold text-[9px] cursor-pointer"
+                    >
+                      {copiedSql ? 'Tersalin!' : 'Salin SQL'}
+                    </button>
+                    <pre className="whitespace-pre">{SQL_FIX_COMMAND}</pre>
+                  </div>
+                </div>
+              )}
+
+              {/* Specific guidance for UID not found */}
+              {debugInfo.stage === 'not_found' && (
+                <div className="bg-[#EBF5FB] p-2.5 rounded-xl border border-[#D4E6F1] text-[11px] text-[#1B4F72]">
+                  <p className="font-bold mb-1">Cara Menambahkan ke admin_users:</p>
+                  <p>
+                    Buka Supabase Dashboard &rarr; <strong>Table Editor</strong> &rarr; <strong>admin_users</strong> &rarr; <strong>Insert Row</strong>:
+                  </p>
+                  <ul className="list-disc list-inside mt-1 space-y-0.5 font-mono text-[10px]">
+                    <li>id = <span className="text-[#D62828] font-bold">{debugInfo.uid}</span></li>
+                    <li>role = <span className="text-[#D62828] font-bold">admin</span></li>
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 
@@ -152,7 +265,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToSite }) => {
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#906F6B] hover:text-[#2B2D42] p-1 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4CC9F0]"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#906F6B] hover:text-[#2B2D42] p-1 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4CC9F0] cursor-pointer"
                   aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -168,7 +281,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToSite }) => {
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Memverifikasi...</span>
+                  <span>Memverifikasi Akun...</span>
                 </>
               ) : (
                 <span>Masuk Dashboard</span>
@@ -178,7 +291,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onBackToSite }) => {
 
           <div className="mt-6 pt-5 border-t border-[#FCBF49]/20 text-center">
             <p className="text-[11px] text-[#5C403D]">
-              Hanya akun terdaftar di Supabase yang dapat mengakses halaman ini.
+              Hanya akun terdaftar di Supabase dengan role admin yang dapat mengakses.
             </p>
           </div>
         </div>

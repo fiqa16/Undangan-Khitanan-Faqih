@@ -138,6 +138,14 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
       // If user selected a new file to replace existing photo
       if (selectedFile && isSupabaseConfigured) {
         const uploadResult = await uploadFileToStorage(selectedFile, 'gallery');
+        // Clean up old storage file if replacing
+        if (editingPhoto.storage_path) {
+          try {
+            await deleteFileFromStorage(editingPhoto.storage_path);
+          } catch {
+            // Ignore failure to delete old file
+          }
+        }
         finalImageUrl = uploadResult.publicUrl;
         storagePath = uploadResult.path;
       }

@@ -75,26 +75,39 @@ VALUES ('default', 'Thomas & Friends Theme Song', '/lagu-undangan.mp3', true)
 ON CONFLICT (id) DO NOTHING;
 
 
--- 4. TABEL: admin_users (Whitelist Akun Email yang Diizinkan Masuk Admin)
+-- 4. TABEL: admin_users (Tabel Akun Admin - id diisi UID dari auth.users)
 CREATE TABLE IF NOT EXISTS public.admin_users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  email text UNIQUE NOT NULL,
+  email text,
   role text DEFAULT 'admin',
   created_at timestamptz DEFAULT now()
 );
 
--- CONTOH: Masukkan email admin Anda di sini jika ingin whitelist ketat:
--- INSERT INTO public.admin_users (email) VALUES ('fadhiyah16@gmail.com') ON CONFLICT (email) DO NOTHING;
+
+-- ==============================================================
+-- HAK AKSES SCHEMA & TABEL (GRANT)
+-- ==============================================================
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+
+-- Akses baca untuk pengunjung umum (anon)
+GRANT SELECT ON public.invitation_info TO anon, authenticated;
+GRANT SELECT ON public.gallery_photos TO anon, authenticated;
+GRANT SELECT ON public.music_settings TO anon, authenticated;
+
+-- Akses kelola penuh untuk user login (authenticated admin)
+GRANT ALL ON public.invitation_info TO authenticated;
+GRANT ALL ON public.gallery_photos TO authenticated;
+GRANT ALL ON public.music_settings TO authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+-- Akses tabel admin_users untuk authenticated
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.admin_users TO authenticated;
+GRANT SELECT ON public.admin_users TO anon;
 
 
 -- ==============================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
--- Pastikan tabel aman: Pengunjung umum hanya bisa BACA (SELECT),
--- hanya akun Admin yang terautentikasi (auth.role() = 'authenticated')
--- yang bisa INSERT, UPDATE, dan DELETE.
 -- ==============================================================
-
--- Aktifkan RLS di setiap tabel
 ALTER TABLE public.invitation_info ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gallery_photos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.music_settings ENABLE ROW LEVEL SECURITY;
@@ -127,13 +140,13 @@ DROP POLICY IF EXISTS "Admin can manage music_settings" ON public.music_settings
 CREATE POLICY "Admin can manage music_settings" ON public.music_settings
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- Policy untuk admin_users
-DROP POLICY IF EXISTS "Public / Auth can check admin_users" ON public.admin_users;
-CREATE POLICY "Public / Auth can check admin_users" ON public.admin_users
-  FOR SELECT USING (true);
+-- Policy untuk admin_users: authenticated users dapat membaca
+DROP POLICY IF EXISTS "Allow authenticated read admin_users" ON public.admin_users;
+CREATE POLICY "Allow authenticated read admin_users" ON public.admin_users
+  FOR SELECT TO authenticated USING (true);
 
-DROP POLICY IF EXISTS "Admin can manage admin_users" ON public.admin_users;
-CREATE POLICY "Admin can manage admin_users" ON public.admin_users
+DROP POLICY IF EXISTS "Allow authenticated manage admin_users" ON public.admin_users;
+CREATE POLICY "Allow authenticated manage admin_users" ON public.admin_users
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 
@@ -141,28 +154,22 @@ CREATE POLICY "Admin can manage admin_users" ON public.admin_users
 -- STORAGE BUCKET: invitation-assets
 -- Untuk menyimpan file Foto Galeri & File Audio Musik
 -- ==============================================================
-
--- Buat bucket publik jika belum ada
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('invitation-assets', 'invitation-assets', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
--- Policy Storage: Siapapun (publik) boleh melihat dan mengunduh foto/musik
 DROP POLICY IF EXISTS "Public Access to invitation-assets" ON storage.objects;
 CREATE POLICY "Public Access to invitation-assets" ON storage.objects
   FOR SELECT USING (bucket_id = 'invitation-assets');
 
--- Policy Storage: Hanya user authenticated (Admin) yang boleh upload
 DROP POLICY IF EXISTS "Admin can upload to invitation-assets" ON storage.objects;
 CREATE POLICY "Admin can upload to invitation-assets" ON storage.objects
   FOR INSERT TO authenticated WITH CHECK (bucket_id = 'invitation-assets');
 
--- Policy Storage: Hanya user authenticated (Admin) yang boleh update
 DROP POLICY IF EXISTS "Admin can update invitation-assets" ON storage.objects;
 CREATE POLICY "Admin can update invitation-assets" ON storage.objects
   FOR UPDATE TO authenticated USING (bucket_id = 'invitation-assets');
 
--- Policy Storage: Hanya user authenticated (Admin) yang boleh delete
 DROP POLICY IF EXISTS "Admin can delete from invitation-assets" ON storage.objects;
 CREATE POLICY "Admin can delete from invitation-assets" ON storage.objects
   FOR DELETE TO authenticated USING (bucket_id = 'invitation-assets');

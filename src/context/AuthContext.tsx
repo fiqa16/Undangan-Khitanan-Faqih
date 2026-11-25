@@ -2,13 +2,29 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../utils/supabase';
 
+export interface AdminDebugInfo {
+  uid: string;
+  email?: string;
+  stage: 'auth' | 'session' | 'metadata' | 'uid_lookup' | 'user_id_lookup' | 'email_lookup' | 'table_error' | 'not_found' | 'role_mismatch';
+  details?: string;
+  roleFound?: string;
+  dbErrorCode?: string;
+}
+
+export interface AdminVerifyResult {
+  authorized: boolean;
+  error?: string;
+  debugInfo?: AdminDebugInfo;
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   isAdmin: boolean;
   isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string; debugInfo?: AdminDebugInfo }>;
   signOut: () => Promise<void>;
+  lastVerifyResult: AdminVerifyResult | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -18,47 +34,208 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [lastVerifyResult, setLastVerifyResult] = useState<AdminVerifyResult | null>(null);
 
-  // Check if a user is an authorized admin
-  const verifyAdminStatus = async (currentUser: User | null): Promise<boolean> => {
-    if (!currentUser || !currentUser.email) return false;
+  /**
+   * Thorough verification of admin status checking:
+   * 1. app_metadata and user_metadata role === 'admin'
+   * 2. admin_users table match by UID (id = currentUser.id)
+   * 3. admin_users table match by user_id (user_id = currentUser.id)
+   * 4. admin_users table match by email (email = currentUser.email)
+   * With explicit database error diagnostics (e.g. 42501 permission denied, RLS issues)
+   */
+  const verifyAdminStatus = async (currentUser: User | null): Promise<AdminVerifyResult> => {
+    if (!currentUser) {
+      return {
+        authorized: false,
+        error: 'Sesi pengguna tidak ditemukan.',
+        debugInfo: { uid: '', stage: 'session', details: 'User object is null' },
+      };
+    }
 
-    // Check app metadata role
-    if (currentUser.app_metadata?.role === 'admin') {
-      return true;
+    const uid = currentUser.id;
+    const email = currentUser.email || '';
+
+    // 1. Check metadata (app_metadata or user_metadata)
+    const appRole = (currentUser.app_metadata?.role || '').toString().toLowerCase().trim();
+    const userRole = (currentUser.user_metadata?.role || '').toString().toLowerCase().trim();
+
+    if (appRole === 'admin' || userRole === 'admin') {
+      return {
+        authorized: true,
+        debugInfo: {
+          uid,
+          email,
+          stage: 'metadata',
+          roleFound: appRole || userRole,
+          details: 'Role admin terverifikasi dari metadata akun.',
+        },
+      };
     }
 
     if (!isSupabaseConfigured) {
-      return true; // Local preview mode if Supabase not configured
+      return {
+        authorized: true,
+        debugInfo: {
+          uid,
+          email,
+          stage: 'metadata',
+          details: 'Mode pratinjau lokal (Supabase belum terkonfigurasi).',
+        },
+      };
     }
 
+    // 2. Primary Check: Query public.admin_users by UID (id = currentUser.id)
     try {
-      // Check admin_users whitelist table in Supabase
-      const { data, error } = await supabase
+      const { data: uidData, error: uidError } = await supabase
         .from('admin_users')
-        .select('email, role')
-        .eq('email', currentUser.email.toLowerCase().trim())
+        .select('*')
+        .eq('id', uid)
         .maybeSingle();
 
-      if (!error && data) {
-        return true;
+      if (uidError) {
+        console.warn('Query admin_users by id error:', uidError);
+        // Catch PostgreSQL 42501 (permission denied / RLS blocking)
+        if (uidError.code === '42501') {
+          return {
+            authorized: false,
+            error: `Autentikasi akun berhasil (UID: ${uid}), namun database menolak akses ke tabel "public.admin_users" (PostgreSQL Error 42501: permission denied). Peran "authenticated" memerlukan hak akses SELECT pada tabel admin_users.`,
+            debugInfo: {
+              uid,
+              email,
+              stage: 'table_error',
+              dbErrorCode: '42501',
+              details: uidError.message,
+            },
+          };
+        }
       }
 
-      // Check if admin_users table exists but has no rows yet (initial onboarding)
-      const { count, error: countErr } = await supabase
-        .from('admin_users')
-        .select('*', { count: 'exact', head: true });
-
-      if (!countErr && (count === null || count === 0)) {
-        // First user logging in on fresh Supabase database
-        return true;
+      if (uidData) {
+        const role = (uidData.role || '').toString().toLowerCase().trim();
+        // Check if role is admin or if presence in admin_users implies admin
+        if (role === 'admin' || !uidData.role) {
+          return {
+            authorized: true,
+            debugInfo: {
+              uid,
+              email,
+              stage: 'uid_lookup',
+              roleFound: uidData.role || 'admin',
+              details: `UID ${uid} terverifikasi cocok di tabel admin_users dengan role "${uidData.role || 'admin'}".`,
+            },
+          };
+        } else {
+          return {
+            authorized: false,
+            error: `UID Anda (${uid}) terdaftar di tabel admin_users, namun memiliki role "${uidData.role}" (dibutuhkan role "admin").`,
+            debugInfo: {
+              uid,
+              email,
+              stage: 'role_mismatch',
+              roleFound: uidData.role,
+              details: `Role yang ditemukan adalah "${uidData.role}", bukan "admin".`,
+            },
+          };
+        }
       }
 
-      // If admin_users has rows and user is not in it, deny
-      return false;
-    } catch {
-      // If table query fails (e.g. table not created yet), default to allowing authenticated user
-      return true;
+      // 3. Secondary Check: Column user_id = currentUser.id (in case column is named user_id)
+      try {
+        const { data: userIdData, error: userIdError } = await supabase
+          .from('admin_users')
+          .select('*')
+          .eq('user_id', uid)
+          .maybeSingle();
+
+        if (!userIdError && userIdData) {
+          const role = (userIdData.role || '').toString().toLowerCase().trim();
+          if (role === 'admin' || !userIdData.role) {
+            return {
+              authorized: true,
+              debugInfo: {
+                uid,
+                email,
+                stage: 'user_id_lookup',
+                roleFound: userIdData.role || 'admin',
+                details: `UID ${uid} terverifikasi melalui kolom user_id.`,
+              },
+            };
+          } else {
+            return {
+              authorized: false,
+              error: `UID ${uid} ditemukan di kolom user_id, namun memiliki role "${userIdData.role}".`,
+              debugInfo: {
+                uid,
+                email,
+                stage: 'role_mismatch',
+                roleFound: userIdData.role,
+              },
+            };
+          }
+        }
+      } catch {
+        // Ignore if user_id column doesn't exist
+      }
+
+      // 4. Tertiary Check: Match by email (case-insensitive)
+      if (email) {
+        try {
+          const { data: emailData, error: emailError } = await supabase
+            .from('admin_users')
+            .select('*')
+            .ilike('email', email.trim())
+            .maybeSingle();
+
+          if (!emailError && emailData) {
+            const role = (emailData.role || '').toString().toLowerCase().trim();
+            if (role === 'admin' || !emailData.role) {
+              return {
+                authorized: true,
+                debugInfo: {
+                  uid,
+                  email,
+                  stage: 'email_lookup',
+                  roleFound: emailData.role || 'admin',
+                  details: `Email ${email} terverifikasi cocok di tabel admin_users.`,
+                },
+              };
+            } else {
+              return {
+                authorized: false,
+                error: `Email ${email} ditemukan di tabel admin_users, namun role adalah "${emailData.role}".`,
+                debugInfo: {
+                  uid,
+                  email,
+                  stage: 'role_mismatch',
+                  roleFound: emailData.role,
+                },
+              };
+            }
+          }
+        } catch {
+          // Ignore if email column doesn't exist
+        }
+      }
+
+      // If not found in admin_users
+      return {
+        authorized: false,
+        error: `Akses ditolak: Akun ${email} (UID: ${uid}) tidak ditemukan di tabel public.admin_users. Pastikan kolom id pada tabel admin_users berisi UID: ${uid} dan kolom role berisi "admin".`,
+        debugInfo: {
+          uid,
+          email,
+          stage: 'not_found',
+          details: `UID ${uid} tidak ditemukan pada kolom id maupun user_id di tabel admin_users.`,
+        },
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown database error';
+      return {
+        authorized: false,
+        error: `Terjadi kendala saat memeriksa tabel admin_users: ${msg}`,
+        debugInfo: { uid, email, stage: 'table_error', details: msg },
+      };
     }
   };
 
@@ -75,15 +252,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(currentUser);
 
       if (currentUser) {
-        const authorized = await verifyAdminStatus(currentUser);
-        setIsAdmin(authorized);
-        if (!authorized) {
-          await supabase.auth.signOut();
-          setUser(null);
-          setSession(null);
-        }
+        const verifyRes = await verifyAdminStatus(currentUser);
+        setLastVerifyResult(verifyRes);
+        setIsAdmin(verifyRes.authorized);
       } else {
         setIsAdmin(false);
+        setLastVerifyResult(null);
       }
       setIsLoading(false);
     });
@@ -97,10 +271,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(currentUser);
 
       if (currentUser) {
-        const authorized = await verifyAdminStatus(currentUser);
-        setIsAdmin(authorized);
+        const verifyRes = await verifyAdminStatus(currentUser);
+        setLastVerifyResult(verifyRes);
+        setIsAdmin(verifyRes.authorized);
       } else {
         setIsAdmin(false);
+        setLastVerifyResult(null);
       }
       setIsLoading(false);
     });
@@ -110,64 +286,107 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const signIn = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  const signIn = async (
+    email: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string; debugInfo?: AdminDebugInfo }> => {
     if (!isSupabaseConfigured) {
       return {
         success: false,
         error:
-          'Supabase belum dikonfigurasi. Harap isi VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY di file .env.local terlebih dahulu.',
+          'Supabase belum dikonfigurasi. Harap periksa VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY di file .env.local.',
       };
     }
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      // 1. Supabase Authentication (signInWithPassword)
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
 
-      if (error) {
-        let errorMsg = 'Email atau password yang Anda masukkan salah.';
-        if (error.message.includes('Invalid login credentials')) {
-          errorMsg = 'Email atau kata sandi tidak sesuai. Silakan periksa kembali.';
-        } else if (error.message.includes('Email not confirmed')) {
-          errorMsg = 'Email belum dikonfirmasi di Supabase Auth.';
+      if (authError) {
+        let errorMsg = 'Email atau kata sandi tidak sesuai. Silakan periksa kembali.';
+        if (authError.message.includes('Invalid login credentials')) {
+          errorMsg = 'Email atau kata sandi yang Anda masukkan salah. Periksa kembali akun di Authentication Supabase.';
+        } else if (authError.message.includes('Email not confirmed')) {
+          errorMsg = 'Email ini belum dikonfirmasi di Supabase Authentication (pastikan opsi "Auto Confirm" diaktifkan pada user).';
         } else {
-          errorMsg = error.message;
+          errorMsg = `Gagal login ke Supabase Auth: ${authError.message}`;
         }
-        return { success: false, error: errorMsg };
-      }
-
-      if (!data.user) {
-        return { success: false, error: 'User tidak ditemukan.' };
-      }
-
-      // Check authorization
-      const authorized = await verifyAdminStatus(data.user);
-      if (!authorized) {
-        await supabase.auth.signOut();
         return {
           success: false,
-          error: 'Akses Ditolak: Akun Anda tidak memiliki hak akses sebagai Administrator.',
+          error: errorMsg,
+          debugInfo: {
+            uid: '',
+            email: email.trim(),
+            stage: 'auth',
+            details: authError.message,
+          },
         };
       }
 
+      if (!data.user) {
+        return {
+          success: false,
+          error: 'Data pengguna tidak ditemukan setelah autentikasi.',
+          debugInfo: { uid: '', stage: 'session', details: 'data.user is null' },
+        };
+      }
+
+      // 2. Verify admin status & permissions
+      const verifyRes = await verifyAdminStatus(data.user);
+      setLastVerifyResult(verifyRes);
+
+      if (!verifyRes.authorized) {
+        // Sign out to prevent unauthorized session
+        await supabase.auth.signOut();
+        setUser(null);
+        setSession(null);
+        setIsAdmin(false);
+
+        return {
+          success: false,
+          error: verifyRes.error || 'Akses ditolak: Akun Anda tidak memiliki izin sebagai Administrator.',
+          debugInfo: verifyRes.debugInfo,
+        };
+      }
+
+      // 3. Authorized successfully
       setUser(data.user);
       setSession(data.session);
       setIsAdmin(true);
-      return { success: true };
+
+      return {
+        success: true,
+        debugInfo: verifyRes.debugInfo,
+      };
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Terjadi kesalahan saat masuk.';
-      return { success: false, error: message };
+      const message = err instanceof Error ? err.message : 'Terjadi kesalahan sistem saat masuk.';
+      return {
+        success: false,
+        error: message,
+        debugInfo: {
+          uid: '',
+          stage: 'auth',
+          details: message,
+        },
+      };
     }
   };
 
   const signOut = async () => {
     if (isSupabaseConfigured) {
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // Ignore signout error
+      }
     }
     setUser(null);
     setSession(null);
     setIsAdmin(false);
+    setLastVerifyResult(null);
   };
 
   return (
@@ -179,6 +398,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         signIn,
         signOut,
+        lastVerifyResult,
       }}
     >
       {children}

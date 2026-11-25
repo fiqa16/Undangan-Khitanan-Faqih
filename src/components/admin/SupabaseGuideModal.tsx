@@ -18,7 +18,7 @@ interface SupabaseGuideModalProps {
   onShowToast: (message: string) => void;
 }
 
-const SQL_SCHEMA_SNIPPET = `-- SKEMA DATABASE & STORAGE SUPABASE
+const SQL_SCHEMA_SNIPPET = `-- SKEMA DATABASE, IZIN (GRANT), & STORAGE SUPABASE
 -- Jalankan di: Supabase Dashboard -> SQL Editor -> New Query -> Paste & Run
 
 -- 1. TABEL: invitation_info
@@ -60,40 +60,65 @@ CREATE TABLE IF NOT EXISTS public.music_settings (
   updated_at timestamptz DEFAULT now()
 );
 
--- 4. TABEL: admin_users (Whitelist Email Admin)
+-- 4. TABEL: admin_users (Tabel Akun Admin - id diisi UID dari auth.users)
 CREATE TABLE IF NOT EXISTS public.admin_users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  email text UNIQUE NOT NULL,
+  email text,
   role text DEFAULT 'admin',
   created_at timestamptz DEFAULT now()
 );
 
--- 5. ENABLE ROW LEVEL SECURITY (RLS)
+-- 5. HAK AKSES SCHEMA & TABEL (GRANT)
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT ON public.invitation_info TO anon, authenticated;
+GRANT SELECT ON public.gallery_photos TO anon, authenticated;
+GRANT SELECT ON public.music_settings TO anon, authenticated;
+GRANT ALL ON public.invitation_info TO authenticated;
+GRANT ALL ON public.gallery_photos TO authenticated;
+GRANT ALL ON public.music_settings TO authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.admin_users TO authenticated;
+GRANT SELECT ON public.admin_users TO anon;
+
+-- 6. ENABLE ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.invitation_info ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gallery_photos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.music_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
 
--- 6. POLICIES: Public Read, Authenticated Admin Manage
+-- 7. POLICIES: Public Read, Authenticated Admin Manage
+DROP POLICY IF EXISTS "Public Read invitation_info" ON public.invitation_info;
 CREATE POLICY "Public Read invitation_info" ON public.invitation_info FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Admin Manage invitation_info" ON public.invitation_info;
 CREATE POLICY "Admin Manage invitation_info" ON public.invitation_info FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Public Read gallery_photos" ON public.gallery_photos;
 CREATE POLICY "Public Read gallery_photos" ON public.gallery_photos FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Admin Manage gallery_photos" ON public.gallery_photos;
 CREATE POLICY "Admin Manage gallery_photos" ON public.gallery_photos FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Public Read music_settings" ON public.music_settings;
 CREATE POLICY "Public Read music_settings" ON public.music_settings FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Admin Manage music_settings" ON public.music_settings;
 CREATE POLICY "Admin Manage music_settings" ON public.music_settings FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "Auth Read admin_users" ON public.admin_users FOR SELECT USING (true);
-CREATE POLICY "Admin Manage admin_users" ON public.admin_users FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow authenticated read admin_users" ON public.admin_users;
+CREATE POLICY "Allow authenticated read admin_users" ON public.admin_users FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Allow authenticated manage admin_users" ON public.admin_users;
+CREATE POLICY "Allow authenticated manage admin_users" ON public.admin_users FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- 7. STORAGE BUCKET: invitation-assets
+-- 8. STORAGE BUCKET: invitation-assets
 INSERT INTO storage.buckets (id, name, public) VALUES ('invitation-assets', 'invitation-assets', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
+DROP POLICY IF EXISTS "Public Read Assets" ON storage.objects;
 CREATE POLICY "Public Read Assets" ON storage.objects FOR SELECT USING (bucket_id = 'invitation-assets');
+DROP POLICY IF EXISTS "Admin Upload Assets" ON storage.objects;
 CREATE POLICY "Admin Upload Assets" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'invitation-assets');
+DROP POLICY IF EXISTS "Admin Update Assets" ON storage.objects;
 CREATE POLICY "Admin Update Assets" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'invitation-assets');
+DROP POLICY IF EXISTS "Admin Delete Assets" ON storage.objects;
 CREATE POLICY "Admin Delete Assets" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'invitation-assets');`;
 
 export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({
@@ -130,14 +155,14 @@ export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({
                 Panduan Setup Supabase &amp; SQL Schema
               </h3>
               <p className="text-xs text-[#5C403D]">
-                Langkah konfigurasi database dan storage untuk website undangan
+                Langkah konfigurasi database, izin GRANT, dan storage untuk website undangan
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-full text-[#5C403D] hover:bg-[#FFF9F2]"
+            className="p-1 rounded-full text-[#5C403D] hover:bg-[#FFF9F2] cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -212,20 +237,17 @@ export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({
 
           <div className="space-y-3 pt-2">
             <h4 className="font-extrabold text-sm text-[#2B2D42]">
-              Langkah 2: Buat Akun Admin di Supabase Auth
+              Langkah 2: Hubungkan Akun Admin ke Tabel admin_users
             </h4>
             <ol className="list-decimal list-inside space-y-1.5 text-[#5C403D] pl-1 leading-relaxed">
               <li>
-                Buka menu <strong>Authentication</strong> &rarr; <strong>Users</strong>.
+                Buka menu <strong>Authentication</strong> &rarr; <strong>Users</strong> untuk melihat <strong>UID</strong> akun Anda.
               </li>
               <li>
-                Klik tombol <strong>Add User</strong> &rarr; <strong>Create User</strong>.
+                Buka menu <strong>Table Editor</strong> &rarr; tabel <code>admin_users</code>.
               </li>
               <li>
-                Masukkan <strong>Email</strong> dan <strong>Password</strong> untuk akun admin Anda. Pastikan opsi <em>Auto Confirm User</em> dicentang agar dapat langsung login.
-              </li>
-              <li>
-                (Opsional) Jika ingin membatasi hanya email tertentu yang boleh login, masukkan email admin ke tabel <code>admin_users</code>.
+                Pastikan kolom <code>id</code> diisi dengan <strong>UID</strong> dari akun authentication, dan kolom <code>role</code> diisi <code>admin</code>.
               </li>
             </ol>
           </div>
@@ -240,7 +262,7 @@ export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({
               </p>
               <div className="font-mono text-[11px] bg-white p-3 rounded-xl border border-[#FCBF49]/30 space-y-1">
                 <div><span className="text-[#D62828] font-bold">VITE_SUPABASE_URL</span> = https://xyzcompany.supabase.co</div>
-                <div><span className="text-[#D62828] font-bold">VITE_SUPABASE_ANON_KEY</span> = eyJhbGciOiJIUzI1Ni... (anon / public key)</div>
+                <div><span className="text-[#D62828] font-bold">VITE_SUPABASE_ANON_KEY</span> = eyJhbGciOiJIUzI1Ni... (anon / publishable key)</div>
               </div>
               <p className="text-[11px] text-[#5C403D]">
                 Masukkan kedua variabel di atas pada <strong>Vercel &rarr; Settings &rarr; Environment Variables</strong>, lalu lakukan Redeploy.
@@ -254,7 +276,7 @@ export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[40px] px-6 rounded-full bg-[#2B2D42] text-white text-xs font-bold hover:bg-[#3D3F5A]"
+            className="min-h-[40px] px-6 rounded-full bg-[#2B2D42] text-white text-xs font-bold hover:bg-[#3D3F5A] cursor-pointer"
           >
             Tutup Panduan
           </button>

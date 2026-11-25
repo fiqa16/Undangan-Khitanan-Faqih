@@ -37,6 +37,9 @@ export interface InvitationInfo {
   event_address: string;
   invitation_message: string;
   hero_photo_url?: string | null;
+  venue_photo_url?: string | null;
+  venue_photo_path?: string | null;
+  venue_description?: string | null;
   maps_url?: string | null;
   maps_embed_url?: string | null;
   updated_at?: string;
@@ -54,6 +57,19 @@ export interface GalleryPhoto {
   created_at?: string;
 }
 
+export interface RundownItem {
+  id: string;
+  activity_name: string;
+  start_time: string;
+  end_time?: string | null;
+  duration?: string | null;
+  description?: string | null;
+  order_index: number;
+  is_published: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface MusicSetting {
   id: string;
   title: string;
@@ -68,7 +84,7 @@ export interface MusicSetting {
  */
 export async function uploadFileToStorage(
   file: File,
-  folder: 'gallery' | 'music'
+  folder: 'gallery' | 'music' | 'venue'
 ): Promise<{ publicUrl: string; path: string }> {
   if (!isSupabaseConfigured) {
     throw new Error('Supabase belum dikonfigurasi dengan URL dan Anon Key yang valid.');
@@ -76,7 +92,9 @@ export async function uploadFileToStorage(
 
   const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const fileExt = cleanFileName.split('.').pop() || (folder === 'music' ? 'mp3' : 'jpg');
-  const filePath = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+  // Unique file naming to prevent browser caching or file name collisions
+  const uniqueToken = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const filePath = `${folder}/${uniqueToken}.${fileExt}`;
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKET_NAME)
@@ -86,6 +104,11 @@ export async function uploadFileToStorage(
     });
 
   if (uploadError) {
+    if (uploadError.message?.toLowerCase().includes('bucket not found') || uploadError.message?.includes('404')) {
+      throw new Error(
+        `Bucket '${BUCKET_NAME}' belum dibuat di Supabase Storage. Harap jalankan script 'supabase-update-v2.sql' di Supabase SQL Editor.`
+      );
+    }
     throw new Error(`Gagal mengunggah file ke Supabase Storage: ${uploadError.message}`);
   }
 
