@@ -5,7 +5,13 @@ ALTER TABLE public.invitation_info
   ADD COLUMN IF NOT EXISTS hero_photo_path text,
   ADD COLUMN IF NOT EXISTS venue_photo_url text,
   ADD COLUMN IF NOT EXISTS venue_photo_path text,
-  ADD COLUMN IF NOT EXISTS venue_description text;
+  ADD COLUMN IF NOT EXISTS venue_description text,
+  ADD COLUMN IF NOT EXISTS qris_photo_url text,
+  ADD COLUMN IF NOT EXISTS qris_photo_path text;
+
+ALTER TABLE public.gallery_photos
+  ADD COLUMN IF NOT EXISTS caption text,
+  ADD COLUMN IF NOT EXISTS tag_label text;
 
 CREATE TABLE IF NOT EXISTS public.event_rundown (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

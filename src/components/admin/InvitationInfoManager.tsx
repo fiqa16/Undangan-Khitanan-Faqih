@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useInvitationData } from '../../context/InvitationContext';
 import { deleteFileFromStorage, uploadFileToStorage } from '../../utils/supabase';
+import { PhotoCropper } from './PhotoCropper';
 
 interface InvitationInfoManagerProps {
   onShowToast: (message: string) => void;
@@ -27,6 +28,7 @@ export const InvitationInfoManager: React.FC<InvitationInfoManagerProps> = ({ on
   const [formData, setFormData] = useState(invitationInfo);
   const [isSaving, setIsSaving] = useState(false);
   const [heroPhotoFile, setHeroPhotoFile] = useState<File | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const [heroPhotoPreview, setHeroPhotoPreview] = useState<string | null>(
     invitationInfo.hero_photo_url || null
   );
@@ -57,14 +59,23 @@ export const InvitationInfoManager: React.FC<InvitationInfoManagerProps> = ({ on
       return;
     }
 
-    setHeroPhotoFile(file);
-    const localUrl = URL.createObjectURL(file);
-    setHeroPhotoPreview(localUrl);
+    setCropFile(file);
     e.target.value = '';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.maps_embed_url) {
+      try {
+        const parsed = new URL(formData.maps_embed_url.trim());
+        if (parsed.protocol !== 'https:' || !['google.com', 'www.google.com', 'maps.google.com'].includes(parsed.hostname) || !parsed.pathname.includes('/maps')) {
+          throw new Error();
+        }
+      } catch {
+        onShowToast('URL embed hanya boleh memakai halaman Google Maps yang aman.');
+        return;
+      }
+    }
     setIsSaving(true);
 
     let uploadedPath: string | null = null;
@@ -312,6 +323,10 @@ export const InvitationInfoManager: React.FC<InvitationInfoManagerProps> = ({ on
             {/* Google Maps Link & Embed */}
             <div className="pt-2 border-t border-[#FCBF49]/20 space-y-3">
               <div>
+                <label className="block text-xs font-bold text-[#2B2D42] mb-1">Pengingat untuk Pengunjung</label>
+                <textarea rows={3} name="tumbler_reminder" value={formData.tumbler_reminder || ''} onChange={handleChange} placeholder="Mohon membawa tumbler pribadi yang sudah diisi air putih..." className="w-full p-3 rounded-xl bg-[#FFF9F2] border border-[#FCBF49]/40 text-xs text-[#2B2D42] focus:outline-none focus:ring-2 focus:ring-[#D62828]" />
+              </div>
+              <div>
                 <label className="block text-xs font-bold text-[#2B2D42] mb-1">
                   Link Google Maps (Tombol Buka Peta)
                 </label>
@@ -451,6 +466,7 @@ export const InvitationInfoManager: React.FC<InvitationInfoManagerProps> = ({ on
           </div>
         </div>
       </div>
+      {cropFile && <PhotoCropper file={cropFile} aspect={6 / 7} onCancel={() => setCropFile(null)} onSave={(cropped) => { setHeroPhotoFile(cropped); setHeroPhotoPreview(URL.createObjectURL(cropped)); setCropFile(null); }} />}
     </div>
   );
 };

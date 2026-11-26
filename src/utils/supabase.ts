@@ -41,8 +41,15 @@ export interface InvitationInfo {
   venue_photo_url?: string | null;
   venue_photo_path?: string | null;
   venue_description?: string | null;
+  qris_photo_url?: string | null;
+  qris_photo_path?: string | null;
   maps_url?: string | null;
   maps_embed_url?: string | null;
+  tumbler_reminder?: string | null;
+  venue_building_floor?: string | null;
+  venue_stairs_instructions?: string | null;
+  venue_lift_instructions?: string | null;
+  venue_video_url?: string | null;
   updated_at?: string;
 }
 
@@ -57,6 +64,13 @@ export interface GalleryPhoto {
   order_index: number;
   created_at?: string;
 }
+
+export type GalleryPhotoUpdate = Partial<
+  Pick<
+    GalleryPhoto,
+    'carriage_no' | 'tag_label' | 'title' | 'caption' | 'image_url' | 'storage_path' | 'order_index'
+  >
+>;
 
 export interface RundownItem {
   id: string;
@@ -80,12 +94,26 @@ export interface MusicSetting {
   updated_at?: string;
 }
 
+export type VenueGuideCategory = 'stairs' | 'lift' | 'cafe';
+
+export interface VenueGuidePhoto {
+  id: string;
+  category: VenueGuideCategory;
+  title: string;
+  description: string;
+  image_url: string;
+  storage_path: string | null;
+  order_index: number;
+  is_published: boolean;
+  created_at?: string;
+}
+
 /**
  * Upload file to Supabase Storage (bucket: invitation-assets)
  */
 export async function uploadFileToStorage(
   file: File,
-  folder: 'gallery' | 'music' | 'venue'
+  folder: 'gallery' | 'music' | 'venue' | 'qris'
 ): Promise<{ publicUrl: string; path: string }> {
   if (!isSupabaseConfigured) {
     throw new Error('Supabase belum dikonfigurasi dengan URL dan Anon Key yang valid.');
@@ -103,7 +131,7 @@ export async function uploadFileToStorage(
   const { error: uploadError } = await supabase.storage
     .from(BUCKET_NAME)
     .upload(filePath, file, {
-      cacheControl: '3600',
+      cacheControl: '0',
       upsert: false,
     });
 

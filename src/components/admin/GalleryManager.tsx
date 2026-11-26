@@ -17,6 +17,7 @@ import {
   GalleryPhoto,
   uploadFileToStorage,
 } from '../../utils/supabase';
+import { PhotoCropper } from './PhotoCropper';
 
 interface GalleryManagerProps {
   onShowToast: (message: string) => void;
@@ -28,10 +29,21 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
     addGalleryPhoto,
     updateGalleryPhoto,
     deleteGalleryPhoto,
+    reorderGalleryPhotos,
     isSupabaseConfigured,
     refreshData,
   } = useInvitationData();
   const savedPhotos = galleryPhotos.filter((photo) => !photo.id.startsWith('default-'));
+
+  const movePhoto = async (photo: GalleryPhoto, direction: -1 | 1) => {
+    const index = savedPhotos.findIndex((item) => item.id === photo.id);
+    const target = index + direction;
+    if (target < 0 || target >= savedPhotos.length) return;
+    const reordered = [...savedPhotos];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    try { await reorderGalleryPhotos(reordered); }
+    catch (error) { onShowToast(error instanceof Error ? error.message : 'Gagal mengatur urutan galeri.'); }
+  };
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -45,6 +57,7 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
   const [formTagLabel, setFormTagLabel] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -87,10 +100,8 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
       return;
     }
 
-    setSelectedFile(file);
+    setCropFile(file);
     setUploadError(null);
-    const localUrl = URL.createObjectURL(file);
-    setPreviewUrl(localUrl);
   };
 
   // Save Add
@@ -330,6 +341,10 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
 
             {/* Actions: Edit & Delete */}
             <div className="mt-4 pt-3 border-t border-[#FCBF49]/30 flex items-center justify-between gap-2">
+              <div className="flex gap-1">
+                <button type="button" onClick={() => void movePhoto(photo, -1)} disabled={idx === 0} aria-label={`Naikkan urutan ${photo.title}`} className="min-h-[38px] rounded-full border px-2 text-xs disabled:opacity-40">↑</button>
+                <button type="button" onClick={() => void movePhoto(photo, 1)} disabled={idx === savedPhotos.length - 1} aria-label={`Turunkan urutan ${photo.title}`} className="min-h-[38px] rounded-full border px-2 text-xs disabled:opacity-40">↓</button>
+              </div>
               <button
                 type="button"
                 onClick={() => handleOpenEdit(photo)}
@@ -703,6 +718,7 @@ export const GalleryManager: React.FC<GalleryManagerProps> = ({ onShowToast }) =
           </div>
         </div>
       )}
+      {cropFile && <PhotoCropper file={cropFile} aspect={1.2} onCancel={() => setCropFile(null)} onSave={(cropped) => { setSelectedFile(cropped); setPreviewUrl(URL.createObjectURL(cropped)); setCropFile(null); }} />}
     </div>
   );
 };

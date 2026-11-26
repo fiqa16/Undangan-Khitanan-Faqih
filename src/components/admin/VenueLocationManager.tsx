@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useInvitationData } from '../../context/InvitationContext';
 import { uploadFileToStorage, deleteFileFromStorage } from '../../utils/supabase';
+import { PhotoCropper } from './PhotoCropper';
 
 interface VenueLocationManagerProps {
   onShowToast: (message: string) => void;
@@ -24,6 +25,7 @@ export const VenueLocationManager: React.FC<VenueLocationManagerProps> = ({ onSh
   const { invitationInfo, updateVenueLocation, isSupabaseConfigured } = useInvitationData();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [descriptionInput, setDescriptionInput] = useState<string>(
     invitationInfo.venue_description ||
@@ -55,10 +57,8 @@ export const VenueLocationManager: React.FC<VenueLocationManagerProps> = ({ onSh
       return;
     }
 
-    setSelectedFile(file);
+    setCropFile(file);
     setStatusError(null);
-    const objectUrl = URL.createObjectURL(file);
-    setPreviewUrl(objectUrl);
     e.target.value = '';
   };
 
@@ -482,6 +482,7 @@ export const VenueLocationManager: React.FC<VenueLocationManagerProps> = ({ onSh
           </div>
         </div>
       )}
+      {cropFile && <PhotoCropper file={cropFile} aspect={1.6} onCancel={() => setCropFile(null)} onSave={(cropped) => { setSelectedFile(cropped); setPreviewUrl(URL.createObjectURL(cropped)); setCropFile(null); }} />}
     </div>
   );
 };

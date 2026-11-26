@@ -70,6 +70,8 @@ export const CarriageGallery: React.FC = () => {
                       <img
                         src={item.image_url}
                         alt={item.title}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-cover"
                       />
                     ) : (
@@ -151,6 +153,8 @@ export const CarriageGallery: React.FC = () => {
                 <img
                   src={selectedMemory.image_url}
                   alt={selectedMemory.title}
+                    loading="lazy"
+                    decoding="async"
                   className="w-full h-full object-cover"
                 />
               ) : (

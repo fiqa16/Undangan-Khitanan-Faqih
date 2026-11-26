@@ -1,5 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Lock, Music, Pause, Share2, Train } from 'lucide-react';
+import { Loader2, Music, Pause, Share2, Train } from 'lucide-react';
 import { BoardingPassTicket } from './components/BoardingPassTicket';
 import { BottomStationNav } from './components/BottomStationNav';
 import { CarriageGallery } from './components/CarriageGallery';
@@ -8,7 +8,7 @@ import { RsvpAndWishes } from './components/RsvpAndWishes';
 import { StationCountdown } from './components/StationCountdown';
 import { TrackDivider } from './components/StorybookIllustrations';
 import { TicketBoothGift } from './components/TicketBoothGift';
-import { VenueAndRundown } from './components/VenueAndRundown';
+import { VenueGuide } from './components/VenueGuide';
 import { OpeningScreen } from './components/OpeningScreen';
 import {
   playTrainWhistle,
@@ -25,10 +25,8 @@ const AdminPage = React.lazy(() =>
 );
 
 function MainInvitationContent({
-  onNavigateToAdmin,
   showToast,
 }: {
-  onNavigateToAdmin: () => void;
   showToast: (message: string) => void;
 }) {
   const { invitationInfo, musicSettings } = useInvitationData();
@@ -181,8 +179,8 @@ function MainInvitationContent({
 
         <TrackDivider />
 
-        {/* Stop 4: Event Rundown & Venue Station Map */}
-        <VenueAndRundown onShowToast={showToast} />
+        {/* Venue map and visitor access guide */}
+        <VenueGuide onShowToast={showToast} />
 
         <TrackDivider />
 
@@ -242,18 +240,6 @@ function MainInvitationContent({
               Choo-Choo Khitan Adventure · {invitationInfo.event_day_date}
             </p>
 
-            {/* Subtle Admin Access Link */}
-            <div className="mt-4 pt-3 border-t border-[#FCBF49]/20 flex justify-center">
-              <button
-                type="button"
-                onClick={onNavigateToAdmin}
-                className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#906F6B] hover:text-[#D62828] px-3 py-1.5 rounded-full hover:bg-[#FFDEA9]/30 transition-colors cursor-pointer"
-                title="Kelola Undangan (Khusus Admin)"
-              >
-                <Lock className="w-3 h-3" />
-                <span>Panel Admin</span>
-              </button>
-            </div>
           </div>
         </footer>
       </main>
@@ -349,10 +335,7 @@ export default function App() {
             />
           </Suspense>
         ) : (
-          <MainInvitationContent
-            onNavigateToAdmin={() => navigateTo('/admin')}
-            showToast={showToast}
-          />
+          <MainInvitationContent showToast={showToast} />
         )}
 
         {/* Global Micro-Toast Notification */}

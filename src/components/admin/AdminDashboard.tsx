@@ -11,7 +11,10 @@ import {
   Sparkles,
   RefreshCw,
   MapPin,
-  ListOrdered,
+  QrCode,
+  Send,
+  MessageSquareText,
+  UsersRound,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useInvitationData } from '../../context/InvitationContext';
@@ -20,9 +23,12 @@ import { InvitationInfoManager } from './InvitationInfoManager';
 import { MusicManager } from './MusicManager';
 import { SupabaseGuideModal } from './SupabaseGuideModal';
 import { VenueLocationManager } from './VenueLocationManager';
-import { RundownManager } from './RundownManager';
+import { QrisManager } from './QrisManager';
+import { VenueGuideManager } from './VenueGuideManager';
+import { InvitationShareManager } from './InvitationShareManager';
+import { GuestResponseManager } from './GuestResponseManager';
 
-type ActiveTab = 'galeri' | 'info' | 'musik' | 'lokasi' | 'rundown';
+type ActiveTab = 'galeri' | 'info' | 'musik' | 'lokasi' | 'panduan' | 'qris' | 'bagikan' | 'ucapan' | 'rsvp';
 
 interface AdminDashboardProps {
   onViewSite: () => void;
@@ -208,18 +214,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <MapPin className="w-4 h-4" />
             <span>D. Kelola Lokasi Acara</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('rundown')}
-            className={`min-h-[44px] px-5 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-              activeTab === 'rundown'
-                ? 'bg-[#D62828] text-white shadow-xs'
-                : 'text-[#5C403D] hover:text-[#2B2D42] hover:bg-[#FFF9F2]'
-            }`}
-          >
-            <ListOrdered className="w-4 h-4" />
-            <span>E. Kelola Rundown</span>
+          <button type="button" onClick={() => setActiveTab('panduan')} className={`min-h-[44px] px-5 rounded-xl text-xs font-bold inline-flex items-center gap-2 whitespace-nowrap ${activeTab === 'panduan' ? 'bg-[#D62828] text-white' : 'text-[#5C403D]'}`}><MapPin className="w-4 h-4"/><span>Panduan Lokasi &amp; Venue</span></button>
+          <button type="button" onClick={() => setActiveTab('qris')} className={`min-h-[44px] px-5 rounded-xl text-xs font-bold inline-flex items-center gap-2 whitespace-nowrap ${activeTab === 'qris' ? 'bg-[#D62828] text-white' : 'text-[#5C403D]'}`}>
+            <QrCode className="h-4 w-4"/><span>F. Foto QRIS</span>
           </button>
+          <button type="button" onClick={() => setActiveTab('bagikan')} className={`min-h-[44px] px-5 rounded-xl text-xs font-bold inline-flex items-center gap-2 whitespace-nowrap ${activeTab === 'bagikan' ? 'bg-[#D62828] text-white' : 'text-[#5C403D]'}`}><Send className="w-4 h-4"/><span>Bagikan Undangan</span></button>
+          <button type="button" onClick={() => setActiveTab('ucapan')} className={`min-h-[44px] px-5 rounded-xl text-xs font-bold inline-flex items-center gap-2 whitespace-nowrap ${activeTab === 'ucapan' ? 'bg-[#D62828] text-white' : 'text-[#5C403D]'}`}><MessageSquareText className="w-4 h-4"/><span>Kelola Ucapan</span></button>
+          <button type="button" onClick={() => setActiveTab('rsvp')} className={`min-h-[44px] px-5 rounded-xl text-xs font-bold inline-flex items-center gap-2 whitespace-nowrap ${activeTab === 'rsvp' ? 'bg-[#D62828] text-white' : 'text-[#5C403D]'}`}><UsersRound className="w-4 h-4"/><span>Data RSVP &amp; Penumpang</span></button>
         </div>
 
         {/* Tab Content */}
@@ -228,7 +229,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {activeTab === 'info' && <InvitationInfoManager onShowToast={onShowToast} />}
           {activeTab === 'musik' && <MusicManager onShowToast={onShowToast} />}
           {activeTab === 'lokasi' && <VenueLocationManager onShowToast={onShowToast} />}
-          {activeTab === 'rundown' && <RundownManager onShowToast={onShowToast} />}
+          {activeTab === 'panduan' && <VenueGuideManager onShowToast={onShowToast} />}
+          {activeTab === 'qris' && <QrisManager onShowToast={onShowToast} />}
+          {activeTab === 'bagikan' && <InvitationShareManager onShowToast={onShowToast} />}
+          {activeTab === 'ucapan' && <GuestResponseManager mode="wishes" onShowToast={onShowToast} />}
+          {activeTab === 'rsvp' && <GuestResponseManager mode="rsvp" onShowToast={onShowToast} />}
         </div>
       </main>
 

@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import {Check, Copy, Gift, QrCode, X} from 'lucide-react';
 import {QrisMatrixGraphic} from './StorybookIllustrations';
+import { useInvitationData } from '../context/InvitationContext';
 
 interface TicketBoothGiftProps {
   onShowToast: (message: string) => void;
@@ -32,6 +33,7 @@ const BANK_ACCOUNTS: BankAccount[] = [
 ];
 
 export const TicketBoothGift: React.FC<TicketBoothGiftProps> = ({onShowToast}) => {
+  const { invitationInfo } = useInvitationData();
   const [activeTab, setActiveTab] = useState<'bank' | 'qris'>('bank');
   const [copiedBank, setCopiedBank] = useState<string | null>(null);
   const [qrisModalOpen, setQrisModalOpen] = useState(false);
@@ -145,7 +147,7 @@ export const TicketBoothGift: React.FC<TicketBoothGiftProps> = ({onShowToast}) =
               NMID: ID1020264419820 · Khitan Faqih Jakarta Selatan
             </p>
             <div className="inline-block bg-white p-2.5 rounded-2xl border border-[#E5BDB9]/70 shadow-xs">
-              <QrisMatrixGraphic />
+              {invitationInfo.qris_photo_url ? <img src={invitationInfo.qris_photo_url} alt="Kode QRIS" className="mx-auto h-52 w-52 object-contain" /> : <QrisMatrixGraphic />}
             </div>
             <p className="text-xs text-[#5C403D] mt-2.5 mb-3">
               Pindai kode QRIS melalui GoPay, OVO, Dana, ShopeePay, atau Mobile Banking.
@@ -189,7 +191,7 @@ export const TicketBoothGift: React.FC<TicketBoothGiftProps> = ({onShowToast}) =
               </button>
             </div>
             <div className="bg-[#FFF9F2] rounded-2xl p-4 border border-[#FCBF49]/40">
-              <QrisMatrixGraphic />
+              {invitationInfo.qris_photo_url ? <img src={invitationInfo.qris_photo_url} alt="Kode QRIS" className="mx-auto h-64 w-64 object-contain" /> : <QrisMatrixGraphic />}
               <p className="text-xs font-bold text-[#2B2D42] mt-3">
                 Walimatul Khitan Faqih Al-Arif Billah
               </p>
